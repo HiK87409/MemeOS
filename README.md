@@ -39,6 +39,203 @@ MemeOS 是一个现代化的笔记管理应用，支持双向链接、标签管�
 ### 环境要求
 
 - Node.js 16+
+## Node.js 安装指南
+
+### Windows 系统
+
+#### 方法1：官方安装包（推荐）
+1. 访问 [Node.js 官网](https://nodejs.org/)
+2. 下载 LTS（长期支持）版本
+3. 运行安装程序，按提示完成安装
+4. 安装完成后，打开命令提示符或 PowerShell 验证安装：
+   ```bash
+   node --version
+   npm --version
+   ```
+
+#### 方法2：包管理器安装
+
+**使用 Chocolatey：**
+```bash
+# 安装 Chocolatey（如果未安装）
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# 安装 Node.js
+choco install nodejs-lts
+```
+
+**使用 Winget：**
+```bash
+# 安装 Node.js LTS
+winget install OpenJS.NodeJS.LTS
+```
+
+### macOS 系统
+
+#### 方法1：官方安装包
+1. 访问 [Node.js 官网](https://nodejs.org/)
+2. 下载 macOS 版本的安装包
+3. 双击 .pkg 文件并按提示安装
+4. 验证安装：
+   ```bash
+   node --version
+   npm --version
+   ```
+
+#### 方法2：包管理器
+
+**使用 Homebrew（推荐）：**
+```bash
+# 安装 Homebrew（如果未安装）
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 安装 Node.js
+brew install node
+```
+
+**使用 NVM（Node Version Manager）：**
+```bash
+# 安装 NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 重新加载终端配置
+source ~/.bashrc  # 或 source ~/.zshrc
+
+# 安装最新的 LTS 版本
+nvm install --lts
+nvm use --lts
+```
+
+### Linux 系统
+
+#### Ubuntu/Debian 系统
+
+**使用 APT 包管理器：**
+```bash
+# 更新包列表
+sudo apt update
+
+# 安装 Node.js 和 npm
+sudo apt install nodejs npm
+
+# 或者使用 NodeSource 仓库获取最新版本
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+#### CentOS/RHEL/Fedora 系统
+
+**使用 DNF/YUM 包管理器：**
+```bash
+# CentOS/RHEL 7
+sudo yum install epel-release
+sudo yum install nodejs npm
+
+# CentOS/RHEL 8+ 或 Fedora
+sudo dnf install nodejs npm
+```
+
+**使用 NVM（推荐）：**
+```bash
+# 安装 NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 重新加载终端配置
+source ~/.bashrc
+
+# 安装最新的 LTS 版本
+nvm install --lts
+nvm use --lts
+```
+
+### 验证安装
+
+无论使用哪种安装方法，都可以通过以下命令验证安装是否成功：
+
+```bash
+# 检查 Node.js 版本
+node --version
+# 应该显示类似 v18.17.0 或更高版本
+
+# 检查 npm 版本
+npm --version
+# 应该显示类似 9.6.7 或更高版本
+
+# 检查安装路径
+which node
+which npm
+```
+
+### 常见问题解决
+
+#### 1. 权限问题
+如果在安装过程中遇到权限问题，可以尝试：
+
+```bash
+# macOS/Linux
+sudo chown -R $(whoami) $(npm config get prefix)/{lib/node_modules,bin,share}
+
+# 或者使用 nvm 安装，避免权限问题
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+```
+
+#### 2. 版本管理
+如果需要管理多个 Node.js 版本，推荐使用 NVM：
+
+```bash
+# 安装 NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 查看可用的 Node.js 版本
+nvm ls-remote
+
+# 安装特定版本
+nvm install 18.17.0
+
+# 切换版本
+nvm use 18.17.0
+
+# 设置默认版本
+nvm alias default 18.17.0
+```
+
+#### 3. 网络问题
+如果下载速度慢或无法访问，可以：
+
+- 使用国内镜像源
+- 配置代理
+- 下载离线安装包
+
+#### 4. 环境变量问题
+如果命令无法识别，可能需要手动配置环境变量：
+
+**Windows：**
+1. 右键"此电脑" → "属性" → "高级系统设置" → "环境变量"
+2. 在"系统变量"中找到 Path 变量
+3. 添加 Node.js 安装路径（如 `C:\Program Files\nodejs\`）
+
+**macOS/Linux：**
+```bash
+# 编辑 bash 配置文件
+echo 'export PATH=$PATH:/usr/local/bin' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### 安装完成后的下一步
+
+安装完 Node.js 后，就可以开始使用 MemeOS 项目了：
+
+```bash
+# 克隆项目
+git clone <repository-url>
+cd memeos
+
+# 安装依赖
+npm run install:all
+
+# 启动应用
+npm run start:all
+```
 
 ## Node.js 安装指南
 
@@ -240,10 +437,10 @@ npm run start:all
 
 ### 使用步骤
 
-1. **克隆项目**
+1. **下载/克隆本项目**
    ```bash
    git clone <repository-url>
-   cd memeos
+   cd memeos/cd MemeOS-main
    ```
 
 2. **启动应用**
