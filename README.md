@@ -165,21 +165,6 @@ npm run lint            # 代码检查
 - `utils/` - 工具函数
 - `uploads/` - 文件上传存储
 
-## 部署
-
-1. **构建应用**
-   ```bash
-   npm run build:client
-   npm run build:server
-   ```
-
-2. **配置环境变量**
-   创建 `.env` 文件并配置必要的环境变量
-
-3. **启动服务**
-   ```bash
-   npm run start:prod
-   ```
 
 ## 常见问题
 
