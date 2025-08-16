@@ -1,0 +1,386 @@
+/* 字体优化工具类 */
+
+/* 响应式文本大小类 */
+.text-responsive-xs {
+  font-size: 10px;
+}
+
+.text-responsive-sm {
+  font-size: 12px;
+}
+
+.text-responsive-base {
+  font-size: 16px;
+}
+
+.text-responsive-lg {
+  font-size: 18px;
+}
+
+.text-responsive-xl {
+  font-size: 20px;
+}
+
+.text-responsive-2xl {
+  font-size: 24px;
+}
+
+.text-responsive-3xl {
+  font-size: 30px;
+}
+
+.text-responsive-4xl {
+  font-size: 36px;
+}
+
+.text-responsive-5xl {
+  font-size: 48px;
+}
+
+.text-responsive-6xl {
+  font-size: 60px;
+}
+
+/* 移动设备字体适配 (≤768px) */
+@media (max-width: 768px) {
+  .text-responsive-xs {
+    font-size: 8.75px; /* 桌面10px的87.5% */
+  }
+  
+  .text-responsive-sm {
+    font-size: 10.5px; /* 桌面12px的87.5% */
+  }
+  
+  .text-responsive-base {
+    font-size: 14px; /* 桌面16px的87.5% */
+  }
+  
+  .text-responsive-lg {
+    font-size: 15.75px; /* 桌面18px的87.5% */
+  }
+  
+  .text-responsive-xl {
+    font-size: 17.5px; /* 桌面20px的87.5% */
+  }
+  
+  .text-responsive-2xl {
+    font-size: 21px; /* 桌面24px的87.5% */
+  }
+  
+  .text-responsive-3xl {
+    font-size: 26.25px; /* 桌面30px的87.5% */
+  }
+  
+  .text-responsive-4xl {
+    font-size: 31.5px; /* 桌面36px的87.5% */
+  }
+  
+  .text-responsive-5xl {
+    font-size: 42px; /* 桌面48px的87.5% */
+  }
+  
+  .text-responsive-6xl {
+    font-size: 52.5px; /* 桌面60px的87.5% */
+  }
+}
+
+/* 特别小的手机设备适配 (≤400px) */
+@media (max-width: 400px) {
+  .text-responsive-xs {
+    font-size: 7.5px; /* 桌面10px的75% */
+  }
+  
+  .text-responsive-sm {
+    font-size: 9px; /* 桌面12px的75% */
+  }
+  
+  .text-responsive-base {
+    font-size: 12px; /* 桌面16px的75% */
+  }
+  
+  .text-responsive-lg {
+    font-size: 13.5px; /* 桌面18px的75% */
+  }
+  
+  .text-responsive-xl {
+    font-size: 15px; /* 桌面20px的75% */
+  }
+  
+  .text-responsive-2xl {
+    font-size: 18px; /* 桌面24px的75% */
+  }
+  
+  .text-responsive-3xl {
+    font-size: 22.5px; /* 桌面30px的75% */
+  }
+  
+  .text-responsive-4xl {
+    font-size: 27px; /* 桌面36px的75% */
+  }
+  
+  .text-responsive-5xl {
+    font-size: 36px; /* 桌面48px的75% */
+  }
+  
+  .text-responsive-6xl {
+    font-size: 45px; /* 桌面60px的75% */
+  }
+}
+
+/* 平板设备适配 (769px - 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .text-responsive-base {
+    font-size: 15px; /* 桌面16px的93.8% */
+  }
+}
+
+/* 大屏幕设备适配 (≥1920px) */
+@media (min-width: 1920px) {
+  .text-responsive-base {
+    font-size: 18px; /* 桌面16px的112.5% */
+  }
+  
+  .text-responsive-lg {
+    font-size: 20.25px; /* 桌面18px的112.5% */
+  }
+  
+  .text-responsive-xl {
+    font-size: 22.5px; /* 桌面20px的112.5% */
+  }
+  
+  .text-responsive-2xl {
+    font-size: 27px; /* 桌面24px的112.5% */
+  }
+  
+  .text-responsive-3xl {
+    font-size: 33.75px; /* 桌面30px的112.5% */
+  }
+  
+  .text-responsive-4xl {
+    font-size: 40.5px; /* 桌面36px的112.5% */
+  }
+  
+  .text-responsive-5xl {
+    font-size: 54px; /* 桌面48px的112.5% */
+  }
+  
+  .text-responsive-6xl {
+    font-size: 67.5px; /* 桌面60px的112.5% */
+  }
+}
+
+/* 响应式行高类 */
+.leading-responsive {
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .leading-responsive {
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 400px) {
+  .leading-responsive {
+    line-height: 1.4;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .leading-responsive {
+    line-height: 1.55;
+  }
+}
+
+@media (min-width: 1920px) {
+  .leading-responsive {
+    line-height: 1.65;
+  }
+}
+
+/* 特殊元素字体优化 */
+.responsive-heading {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+@media (max-width: 768px) {
+  .responsive-heading {
+    font-size: 21px;
+    line-height: 1.25;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-heading {
+    font-size: 18px;
+    line-height: 1.2;
+  }
+}
+
+.responsive-subheading {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .responsive-subheading {
+    font-size: 15.75px;
+    line-height: 1.35;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-subheading {
+    font-size: 13.5px;
+    line-height: 1.3;
+  }
+}
+
+.responsive-body-text {
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .responsive-body-text {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-body-text {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+}
+
+.responsive-caption {
+  font-size: 14px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .responsive-caption {
+    font-size: 12.25px;
+    line-height: 1.35;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-caption {
+    font-size: 10.5px;
+    line-height: 1.3;
+  }
+}
+
+/* 按钮和表单元素字体优化 */
+.responsive-button {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .responsive-button {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-button {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+}
+
+.responsive-input {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .responsive-input {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-input {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+}
+
+/* 导航和菜单项字体优化 */
+.responsive-nav {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .responsive-nav {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-nav {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+}
+
+/* 卡片内容字体优化 */
+.responsive-card-content {
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .responsive-card-content {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-card-content {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+}
+
+/* 辅助类 */
+.font-optimized {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.text-readable {
+  max-width: 65ch;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .text-readable {
+    max-width: 60ch;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 400px) {
+  .text-readable {
+    max-width: 55ch;
+    line-height: 1.4;
+  }
+}

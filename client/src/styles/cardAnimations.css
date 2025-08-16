@@ -1,0 +1,182 @@
+/* 卡片翻转动画 - 优化版本 */
+@keyframes cardFlip {
+  0% {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: rotateY(90deg) scale(0.98);
+    opacity: 0.8;
+  }
+  100% {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+.card-flip {
+  animation: cardFlip 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* 卡片退出动画 - 优化丝滑版本 */
+@keyframes cardExit {
+  0% {
+    transform: scale(1) rotateY(0deg) translateY(0);
+    opacity: 1;
+    filter: blur(0px);
+  }
+  30% {
+    transform: scale(0.98) rotateY(-3deg) translateY(-2px);
+    opacity: 0.9;
+    filter: blur(0.5px);
+  }
+  70% {
+    transform: scale(0.96) rotateY(-6deg) translateY(-4px);
+    opacity: 0.5;
+    filter: blur(1px);
+  }
+  100% {
+    transform: scale(0.92) rotateY(-8deg) translateY(-6px);
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
+.card-exit {
+  animation: cardExit 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity, filter;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+/* 卡片进入动画 */
+@keyframes cardEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.card-enter {
+  animation: cardEnter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+/* 通用卡片优化 */
+.card-optimized {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+  will-change: transform;
+}
+
+/* 流畅的过渡效果 */
+.smooth-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+/* 卡片悬停发光效果 */
+.card-glow:hover {
+  box-shadow: 0 0 30px rgba(107, 114, 128, 0.3);
+  transform: translateY(-4px) scale(1.02);
+}
+
+/* 卡片弹跳效果 */
+.card-bounce:hover {
+  animation: cardBounce 0.3s ease-in-out;
+}
+
+@keyframes cardBounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.03);
+  }
+}
+
+/* 卡片轻柔效果 */
+.card-gentle:hover {
+  transform: translateY(-2px) scale(1.01);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 3D透视效果 */
+.card-container {
+  perspective: 1000px;
+}
+
+.card-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease-in-out;
+}
+
+.card-3d:hover {
+  transform: rotateX(5deg) rotateY(5deg);
+}
+
+/* 毛玻璃效果增强 - 已移除高斯模糊效果 */
+.glass-card {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+
+
+/* 脉冲效果 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.card-pulse {
+  animation: pulse 2s infinite;
+}
+
+/* 卡片设置按钮动画 */
+.settings-button {
+  transition: all 0.2s ease-in-out;
+}
+
+.settings-button:hover {
+  transform: rotate(90deg) scale(1.1);
+}
+
+/* 响应式动画 */
+@media (prefers-reduced-motion: reduce) {
+  .card-flip,
+  .card-enter,
+  .card-bounce,
+  .card-pulse {
+    animation: none;
+  }
+  
+  .card-glow:hover,
+  .card-gentle:hover,
+  .card-3d:hover {
+    transform: none;
+  }
+}
+
+/* 深色模式优化 */
+@media (prefers-color-scheme: dark) {
+  .card-glow:hover {
+    box-shadow: 0 0 30px rgba(107, 114, 128, 0.2);
+  }
+  
+  .glass-card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}

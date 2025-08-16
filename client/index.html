@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/memo-icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="灰灰笔记 - 简易笔记应用" />
+    <title>灰灰笔记 - 简易笔记应用</title>
+    
+    <!-- 立即执行的深色模式检测脚本 -->
+    <script>
+      (function() {
+        // 检查localStorage中的设置，与ThemeContext保持一致
+        const savedMode = localStorage.getItem('darkMode');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        // 确定是否应该使用深色模式，与ThemeContext逻辑保持一致
+        let shouldUseDark;
+        if (savedMode !== null) {
+          try {
+            shouldUseDark = JSON.parse(savedMode);
+          } catch (error) {
+            console.error('解析darkMode设置失败:', error);
+            shouldUseDark = prefersDark;
+          }
+        } else {
+          shouldUseDark = prefersDark;
+        }
+        
+        // 立即应用深色模式类
+        if (shouldUseDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+        
+        // 立即应用卡片设置，避免闪烁
+        const themeMode = shouldUseDark ? 'dark' : 'light';
+        
+        // 获取全局卡片设置
+        try {
+          const globalSettingsKey = `globalCardSettings_${themeMode}`;
+          const globalSettings = JSON.parse(localStorage.getItem(globalSettingsKey) || '{}');
+          
+          // 应用全局设置到CSS变量
+          const root = document.documentElement;
+          if (globalSettings.backgroundColor) {
+            root.style.setProperty('--card-global-bg', globalSettings.backgroundColor);
+          }
+          if (globalSettings.borderColor) {
+            root.style.setProperty('--card-global-border', globalSettings.borderColor);
+          }
+          if (globalSettings.borderWidth) {
+            root.style.setProperty('--card-global-border-width', `${globalSettings.borderWidth}px`);
+          }
+          if (globalSettings.borderRadius) {
+            root.style.setProperty('--card-global-border-radius', `${globalSettings.borderRadius}px`);
+          }
+          if (globalSettings.shadowSize) {
+            root.style.setProperty('--card-global-shadow', globalSettings.shadowSize);
+          }
+          
+          // 应用字体颜色设置
+          if (globalSettings.mainTextColor) {
+            root.style.setProperty('--card-global-text', globalSettings.mainTextColor);
+          }
+          if (globalSettings.secondaryTextColor) {
+            root.style.setProperty('--card-global-text-secondary', globalSettings.secondaryTextColor);
+          }
+          if (globalSettings.linkTextColor) {
+            root.style.setProperty('--card-global-link', globalSettings.linkTextColor);
+          }
+        } catch (error) {
+          console.error('应用全局卡片设置失败:', error);
+        }
+        
+        // 立即应用基础主题颜色，避免闪烁
+        try {
+          if (!document || !document.documentElement) {
+            console.warn('DOM未完全加载，跳过主题颜色应用');
+            return;
+          }
+          const root = document.documentElement;
+          // 基础主题颜色配置（与colors.js保持一致）
+          const themeColors = {
+            dark: {
+              bg: '#141415',
+              surface: '#1a1a1b',
+              elevated: '#1f1f1f',
+              text: '#f1f5f9',
+              textSecondary: '#cbd5e1',
+              textMuted: '#94a3b8',
+              border: '#475569',
+              primary: '#3b82f6',
+              primaryHover: '#2563eb',
+              secondary: '#3b82f6',
+              secondaryHover: '#2563eb',
+              accent: '#8b5cf6',
+              success: '#10b981',
+              warning: '#f59e0b',
+              error: '#ef4444',
+              info: '#06b6d4'
+            },
+            light: {
+              bg: '#f8fafc',
+              surface: '#e2e8f0',
+              elevated: '#f1f5f9',
+              text: '#0f172a',
+              textSecondary: '#334155',
+              textMuted: '#64748b',
+              border: '#cbd5e1',
+              primary: '#3b82f6',
+              primaryHover: '#2563eb',
+              secondary: '#3b82f6',
+              secondaryHover: '#2563eb',
+              accent: '#8b5cf6',
+              success: '#10b981',
+              warning: '#f59e0b',
+              error: '#ef4444',
+              info: '#06b6d4'
+            }
+          };
+          
+          const colors = themeColors[themeMode];
+          
+          // 应用主题颜色到CSS变量
+          root.style.setProperty('--theme-bg', colors.bg);
+          root.style.setProperty('--theme-surface', colors.surface);
+          root.style.setProperty('--theme-elevated', colors.elevated);
+          root.style.setProperty('--theme-text', colors.text);
+          root.style.setProperty('--theme-text-secondary', colors.textSecondary);
+          root.style.setProperty('--theme-text-muted', colors.textMuted);
+          root.style.setProperty('--theme-border', colors.border);
+          root.style.setProperty('--theme-primary', colors.primary);
+          root.style.setProperty('--theme-primary-hover', colors.primaryHover);
+          root.style.setProperty('--theme-secondary', colors.secondary);
+          root.style.setProperty('--theme-secondary-hover', colors.secondaryHover);
+          root.style.setProperty('--theme-accent', colors.accent);
+          root.style.setProperty('--theme-success', colors.success);
+          root.style.setProperty('--theme-warning', colors.warning);
+          root.style.setProperty('--theme-error', colors.error);
+          root.style.setProperty('--theme-info', colors.info);
+          
+          // 设置基础样式
+          if (document.body) {
+            document.body.style.color = colors.text;
+            document.body.style.background = colors.bg;
+          }
+          
+          console.log('🎨 [index.html] 立即应用主题颜色:', themeMode);
+        } catch (error) {
+          console.error('应用主题颜色失败:', error);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

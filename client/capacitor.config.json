@@ -1,0 +1,11 @@
+{
+  "appId": "com.example.app",
+  "appName": "灰灰笔记",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "Filesystem": {
+      "iosScheme": "file"
+    }
+  }
+}
