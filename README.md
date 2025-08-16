@@ -39,9 +39,8 @@ MemeOS 是一个现代化的笔记管理应用，支持双向链接、标签管�
 ### 环境要求
 
 - Node.js 16+
-- npm 或 yarn
 
-### 安装步骤
+### 使用步骤
 
 1. **克隆项目**
    ```bash
@@ -49,28 +48,13 @@ MemeOS 是一个现代化的笔记管理应用，支持双向链接、标签管�
    cd memeos
    ```
 
-2. **安装依赖**
-   ```bash
-   # 安装前端依赖
-   cd client
-   npm install
-   
-   # 安装后端依赖
-   cd ../server
-   npm install
-   
-   # 返回根目录
-   cd ..
-   npm install
-   ```
-
-3. **启动开发服务器**
+2. **启动应用**
    ```bash
    # 同时启动前端和后端
    npm run start:all
    ```
 
-4. **访问应用**
+3. **访问应用**
    - 前端界面: http://localhost:3000
    - 后端API: http://localhost:30002
 
@@ -193,7 +177,7 @@ A: 检查后端服务器是否正常运行，确认端口配置正确。
 
 如有问题或建议，请通过以下方式联系：
 - 提交 Issue
-- 发送邮件
+- 发送邮件kk@ihuihui.me
 
 ---
 
