@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "targetDefaults": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["{projectRoot}/dist"],
+      "cache": true
+    }
+  },
+  "defaultBase": "master",
+  "plugins": [
+    {
+      "plugin": "@nx/vite/plugin",
+      "options": {
+        "buildTargetName": "vite:build",
+        "testTargetName": "vite:test",
+        "serveTargetName": "serve",
+        "previewTargetName": "vite:preview",
+        "serveStaticTargetName": "serve-static"
+      }
+    }
+  ],
+  "nxCloudAccessToken": "ZGJhZDk0YmUtMDEzYi00YjAwLTg3ZWUtMjFmMWVjNWNlZTFjfHJlYWQtd3JpdGU="
+}

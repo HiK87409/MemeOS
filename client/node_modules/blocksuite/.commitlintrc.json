@@ -1,0 +1,24 @@
+{
+  "extends": ["@commitlint/config-conventional"],
+  "rules": {
+    "scope-enum": [
+      2,
+      "always",
+      [
+        "page",
+        "edgeless",
+        "database",
+        "blocks",
+        "store",
+        "sync",
+        "std",
+        "presets",
+        "playground",
+        "inline",
+        "lit",
+        "sync",
+        "examples"
+      ]
+    ]
+  }
+}

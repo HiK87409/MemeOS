@@ -1,0 +1,38 @@
+name: Canary Release
+
+on:
+  schedule:
+    # At the end of every day
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  id-token: write
+
+jobs:
+  canary-release:
+    name: Publish npm@canary release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Add changeset
+        run: cp .github/snapshot-changeset.md .changeset/
+
+      - name: Update package version
+        run: yarn ci:version:canary
+
+      - name: Build packages
+        run: yarn build:packages
+
+      - name: Publish to NPM
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          yarn config set npmAuthToken ${{ secrets.NPM_TOKEN }}
+          yarn ci:publish:canary
+          rm ".npmrc"
+          yarn config unset npmAuthToken

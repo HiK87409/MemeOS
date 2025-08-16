@@ -1,0 +1,27 @@
+name: PR Title Lint
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+permissions:
+  contents: read
+
+jobs:
+  check-pull-request-title:
+    name: Check pull request title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Check PR title
+        # Using an intermediate environment variable to prevent command injection
+        # See https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$TITLE" | npx commitlint -g ./.commitlintrc.json

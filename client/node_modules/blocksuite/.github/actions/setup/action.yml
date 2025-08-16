@@ -1,0 +1,36 @@
+name: Setup
+description: Setup the environment
+
+runs:
+  using: composite
+  steps:
+    - name: Set environment variables
+      shell: bash
+      run: |
+        echo "FORCE_COLOR=1" >> "${GITHUB_ENV}"
+        echo "DO_NOT_TRACK=1" >> "${GITHUB_ENV}"
+
+    - name: Enable corepack
+      run: corepack enable
+      shell: bash
+
+    - name: Install yarn
+      run: yarn --version
+      shell: bash
+
+    - name: Setup node
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: '.nvmrc'
+        cache: yarn
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Show versions
+      run: |
+        node --version
+        yarn --version
+      shell: bash
+
+    - name: Install
+      run: yarn install
+      shell: bash
