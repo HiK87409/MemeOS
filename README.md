@@ -424,12 +424,12 @@ source ~/.bashrc
 安装完 Node.js 后，就可以开始使用 MemeOS 项目了：
 
 ```bash
-# 克隆项目
+# 克隆/下载项目
 git clone <repository-url>
-cd memeos
+cd memeos或者cd MemeOS-main
 
 # 安装依赖
-npm run install:all
+npm run install:all(我已经打包，应该可以运行，不可以的化，运行这个)
 
 # 启动应用
 npm run start:all
