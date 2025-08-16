@@ -42,7 +42,7 @@ MemeOS 是一个现代化的笔记管理应用，支持双向链接、标签管�
 
 ### 使用步骤
 
-1. **克隆项目**
+1. **下载/克隆本项目**
    ```bash
    git clone <repository-url>
    cd memeos
