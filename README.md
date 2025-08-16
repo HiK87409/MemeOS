@@ -163,20 +163,6 @@ npm run lint            # 代码检查
 
 ## 部署
 
-### Docker 部署
-
-项目包含 Docker 配置文件，可以使用 Docker 进行部署：
-
-```bash
-# 构建镜像
-docker build -t memeos .
-
-# 运行容器
-docker run -p 3000:3000 -p 30002:30002 memeos
-```
-
-### 生产环境部署
-
 1. **构建应用**
    ```bash
    npm run build:client
