@@ -5,6 +5,8 @@
 MemeOS 是一个现代化的笔记管理应用，支持双向链接、标签管理、卡片式视图等功能。采用前后端分离架构，前端使用 React + Vite，后端使用 Node.js + Express + SQLite。
 
 ## 主要功能
+演示视频https://www.bilibili.com/video/BV1NQYvz3EMP
+
 <img width="2560" height="1440" alt="预览" src="https://github.com/user-attachments/assets/31f6072f-cfbb-43d9-b545-f338ff54f73b" />
 <img width="688" height="1288" alt="笔记卡片个性化" src="https://github.com/user-attachments/assets/6345b324-4bde-4ee6-9e38-6d6fd3579ad0" />
 
