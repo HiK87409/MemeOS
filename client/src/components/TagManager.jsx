@@ -1589,8 +1589,57 @@ useEffect(() => {
       if (!activeTag || !overTag) return;
       
       try {
-        // 只允许同级标签之间的排序（都有父标签或都没有父标签）
-        // 不允许通过拖拽建立或解除父子关系
+        // 检查是否拖拽到父标签区域（建立父子关系）
+        if (overTag.isParent && activeTag.parentId !== overTag.id) {
+          // 将标签设置为父标签的子标签
+          await localConfigManager.updateTag(activeTag.id, { parentId: overTag.id });
+          
+          // 获取更新后的标签数据
+          const updatedTags = localConfigManager.getTags();
+          setAllTags(updatedTags);
+          
+          // 重新构建标签层次结构和更新可见标签列表
+          const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+          setTagHierarchy(hierarchy);
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
+          
+          window.showToast(`标签 "${activeTag.name}" 已成为 "${overTag.name}" 的子标签`, 'success');
+          console.log('标签已拖入父标签:', activeTag.name, '->', overTag.name);
+          return;
+        }
+        
+        // 检查是否拖出父标签到根级别（脱离父子关系）
+        if (activeTag.parentId !== null && (overTag.parentId === null || !overTag.isParent)) {
+          // 更新标签的parentId为null
+          await localConfigManager.updateTag(activeTag.id, { parentId: null });
+          
+          // 检查原父标签是否还有其他子标签
+          const allTags = localConfigManager.getTags();
+          const oldParentId = activeTag.parentId;
+          const siblings = allTags.filter(t => t.parentId === oldParentId && t.id !== activeTag.id);
+          
+          if (siblings.length === 0) {
+            await localConfigManager.updateTag(oldParentId, { isParent: false });
+            console.log('原父标签已取消父标签状态:', oldParentId);
+          }
+          
+          // 获取更新后的标签数据
+          const updatedTags = localConfigManager.getTags();
+          setAllTags(updatedTags);
+          
+          // 重新构建标签层次结构和更新可见标签列表
+          const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+          setTagHierarchy(hierarchy);
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
+          
+          window.showToast(`标签 "${activeTag.name}" 已从父标签中移出`, 'success');
+          console.log('标签已拖出父标签:', activeTag.name);
+          return;
+        }
+        
+        // 同级标签之间的排序（都有父标签或都没有父标签）
         if ((activeTag.parentId === null && overTag.parentId === null) || 
             (activeTag.parentId === overTag.parentId)) {
           const oldIndex = visibleTags.findIndex(tag => tag.id === active.id);
@@ -1604,7 +1653,7 @@ useEffect(() => {
           localStorage.setItem('tagOrder', JSON.stringify(tagOrder));
           console.log('标签顺序已更新:', tagOrder);
         } else {
-          // 如果尝试跨层级拖拽，提示用户使用菜单操作
+          // 其他跨层级拖拽情况，提示用户使用菜单操作
           window.showToast('请使用菜单操作来建立父子标签关系', 'warning');
         }
         
@@ -1678,6 +1727,7 @@ useEffect(() => {
       setNodeRef,
       transform,
       transition,
+      isOver,
     } = useSortable({ id: tag.id });
     
     const style = {
@@ -1688,6 +1738,10 @@ useEffect(() => {
     const hasChildren = tag.children && tag.children.length > 0;
     const isExpanded = expandedTags.has(tag.id);
     const isParent = tag.isParent || hasChildren;
+    
+    // 拖拽悬停效果
+     const isDragTarget = isOver && tag.isParent;
+     const isRootDropTarget = isOver && !tag.isParent && !tag.parentId;
     
     return (
       <div
@@ -1700,7 +1754,11 @@ useEffect(() => {
         <div 
           className={`tag-item flex items-center w-full p-2 mb-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 ${
             tag.isPinned ? 'border-l-4 border-blue-500' : ''
-          } ${selectedTag && selectedTag.id === tag.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+          } ${selectedTag && selectedTag.id === tag.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${
+            isDragTarget ? 'bg-blue-100 dark:bg-blue-800/50 border-2 border-blue-400' : ''
+          } ${
+            isRootDropTarget ? 'bg-green-100 dark:bg-green-800/50 border-2 border-green-400' : ''
+          }`}
           style={{ 
             paddingLeft: `${8 + tag.level * 20}px`,
             opacity: transform ? 0.8 : 1
@@ -1711,8 +1769,9 @@ useEffect(() => {
           <div
             {...attributes}
             {...listeners}
-            className="mr-2 p-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
+              className="mr-2 p-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              title={tag.isParent ? "拖拽以重新排序或拖入此父标签" : tag.parentId ? "拖拽以重新排序或拖出到根级别" : "拖拽以重新排序或拖入父标签"}
+            >
             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
               <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
             </svg>
