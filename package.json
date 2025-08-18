@@ -1,6 +1,6 @@
 {
   "name": "memeos",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "MemeOS笔记应用",
   "scripts": {
     "install:all": "cd client && npm install && cd ../server && npm install",
