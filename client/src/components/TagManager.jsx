@@ -130,6 +130,7 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [tagToDelete, setTagToDelete] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [justDragged, setJustDragged] = useState(false);
   const scrollContainerRef = useRef(null);
   
   // 标签树相关状态
@@ -334,6 +335,14 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       console.log('TagManager: 收藏状态同步优化状态:', favoriteConfig.enableSyncOptimization);
     }
     
+    // 如果刚刚进行了拖拽操作，跳过此更新以避免覆盖拖拽后的顺序
+    if (justDragged) {
+      if (favoriteConfig.enableLogging) {
+        console.log('TagManager: 刚刚进行了拖拽操作，跳过收藏列表更新事件以避免覆盖顺序');
+      }
+      return;
+    }
+    
     // 使用更宽松的过滤条件，确保所有有效标签都被保留
     // 首先从localConfigManager获取最新的标签数据，确保不丢失任何标签
     const latestTags = localConfigManager.getTags();
@@ -424,6 +433,14 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       console.log('TagManager: 收到标签更新事件:', { action, tagName, tag });
     }
     
+    // 如果刚刚进行了拖拽操作，跳过此更新以避免覆盖拖拽后的顺序
+    if (justDragged) {
+      if (favoriteConfig.enableLogging) {
+        console.log('TagManager: 刚刚进行了拖拽操作，跳过标签更新事件以避免覆盖顺序');
+      }
+      return;
+    }
+    
     if (action === 'add' && tagName && tag) {
       // 添加新标签到列表
       const existingTag = allTags.find(t => t.name === tagName);
@@ -449,6 +466,14 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
   const handleTagsChanged = (tags) => {
     if (favoriteConfig.enableLogging) {
       console.log('TagManager: 收到标签变化事件:', tags);
+    }
+    
+    // 如果刚刚进行了拖拽操作，跳过此更新以避免覆盖拖拽后的顺序
+    if (justDragged) {
+      if (favoriteConfig.enableLogging) {
+        console.log('TagManager: 刚刚进行了拖拽操作，跳过标签变化事件以避免覆盖顺序');
+      }
+      return;
     }
     
     // 安全地处理标签数据，使用更宽松的过滤条件确保所有有效标签都被保留
@@ -537,8 +562,10 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           console.log('加载本地标签数据...');
         }
         
-        // 强制从数据库重新加载最新数据
-        await localConfigManager.loadFromDatabase();
+        // 强制从数据库重新加载最新数据，但如果刚刚进行了拖拽操作则跳过
+        if (!justDragged) {
+          await localConfigManager.loadFromDatabase();
+        }
         
         // 从本地配置管理器获取同步后的标签和颜色数据
         let tags = localConfigManager.getTags();
@@ -1696,6 +1723,17 @@ useEffect(() => {
           const tagOrder = newSiblings.map(tag => tag.id);
           localStorage.setItem('tagOrder', JSON.stringify(tagOrder));
           
+          // 标记刚刚进行了拖拽排序操作
+          setJustDragged(true);
+          
+          // 延迟重置justDragged状态，确保所有事件监听器都有足够的时间处理
+          setTimeout(() => {
+            setJustDragged(false);
+            if (favoriteConfig.enableLogging) {
+              console.log('TagManager: 拖拽操作完成，重置justDragged状态');
+            }
+          }, 1000); // 1秒后重置，给足够的时间让事件处理完成
+          
           // 不更新数据库中的sortOrder字段，保持内部顺序不变
           console.log('标签顺序已更新到本地存储:', tagOrder);
           window.showToast('标签顺序已更新', 'success');
@@ -1744,6 +1782,10 @@ useEffect(() => {
   // 更新可见标签
   useEffect(() => {
     if (isDragging) return; // 如果正在拖拽，不执行此effect
+    if (justDragged) {
+      // 如果刚刚进行了拖拽操作，跳过此effect以避免覆盖拖拽后的顺序
+      return;
+    }
     
     const { hierarchy, rootTags } = buildTagHierarchy(allTags);
     setTagHierarchy(hierarchy);
@@ -1811,7 +1853,7 @@ useEffect(() => {
     
     setVisibleTags(paginatedTags);
     setHasMore(endIndex < filteredTags.length);
-  }, [allTags, page, buildTagHierarchy, flattenTagTree, searchTerm, isDragging]);
+  }, [allTags, page, buildTagHierarchy, flattenTagTree, searchTerm, isDragging, justDragged]);
   
   // 更新lastTagRef
   useEffect(() => {
