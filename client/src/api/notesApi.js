@@ -355,6 +355,28 @@ export const renameTag = async (oldTagName, newTagName) => {
   }
 };
 
+// 更新标签顺序
+export const updateTagOrder = async (tagOrders, tagHierarchy = null) => {
+  try {
+    // 构建请求数据，包含标签顺序和层次结构
+    const requestData = {
+      tagOrders
+    };
+    
+    // 如果提供了标签层次结构数据，也发送到服务器
+    if (tagHierarchy && Array.isArray(tagHierarchy)) {
+      requestData.tagHierarchy = tagHierarchy;
+    }
+    
+    // 调用API更新标签顺序
+    const response = await api.put('/notes/tags/order', requestData);
+    return response.data;
+  } catch (error) {
+    console.error('更新标签顺序失败:', error);
+    throw error;
+  }
+};
+
 
 
 // 根据标签获取我的笔记

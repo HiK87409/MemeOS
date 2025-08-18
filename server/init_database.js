@@ -114,9 +114,12 @@ class DatabaseInitializer {
             user_id TEXT NOT NULL DEFAULT 'default_user',
             name TEXT NOT NULL,
             color TEXT DEFAULT 'blue',
+            parent_id INTEGER DEFAULT NULL,
+            sort_order INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, name)
+            UNIQUE(user_id, name),
+            FOREIGN KEY (parent_id) REFERENCES tags (id) ON DELETE SET NULL
           )
         `, (err) => {
           if (err) {

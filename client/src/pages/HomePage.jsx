@@ -1065,6 +1065,11 @@ useEffect(() => {
                       </div>
                     )}
                     
+                    {/* 筛选笔记数量显示 */}
+                    <span className="text-sm text-theme-text-muted px-2">
+                      {filteredNotes.length}条笔记
+                    </span>
+                    
                     {/* 清除所有筛选按钮 */}
                     <button
                       onClick={() => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FiCheck, FiX, FiChevronDown, FiPlus, FiMoreVertical, FiEdit2, FiStar, FiFolder, FiFolderPlus, FiFolderMinus, FiTrash2, FiCornerUpLeft, FiCornerUpRight, FiList, FiBookmark } from 'react-icons/fi';
-import { fetchAllTags, createTag, deleteTag as deleteTagApi, removeTagFromNotes, deleteTagAndNotes, renameTag } from '../api/notesApi';
+import { fetchAllTags, createTag, deleteTag as deleteTagApi, removeTagFromNotes, deleteTagAndNotes, renameTag, updateTagOrder } from '../api/notesApi';
 import { getAllColors, getTagColorClass, getTagStyle, saveTagColor } from '../utils/tagColorUtils';
 import { commonColors, getDefaultColor } from '../utils/commonColors';
 import CompactCalendarFilter from './CompactCalendarFilter';
@@ -67,12 +67,8 @@ const customStyles = `
   }
   
   .tag-item {
-    transition: all 0.2s ease;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
     position: relative;
-  }
-  
-  .tag-item:hover {
-    transform: translateX(2px);
   }
   
   .tag-item.dragging {
@@ -133,6 +129,8 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
   const [colorDataLoaded, setColorDataLoaded] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [tagToDelete, setTagToDelete] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  // 移除justDragged状态，不再需要防止排序逻辑覆盖
   const scrollContainerRef = useRef(null);
   
   // 标签树相关状态
@@ -337,6 +335,8 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       console.log('TagManager: 收藏状态同步优化状态:', favoriteConfig.enableSyncOptimization);
     }
     
+    // 移除justDragged判断，不再需要防止排序逻辑覆盖
+    
     // 使用更宽松的过滤条件，确保所有有效标签都被保留
     // 首先从localConfigManager获取最新的标签数据，确保不丢失任何标签
     const latestTags = localConfigManager.getTags();
@@ -427,6 +427,8 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       console.log('TagManager: 收到标签更新事件:', { action, tagName, tag });
     }
     
+    // 移除justDragged判断，不再需要防止排序逻辑覆盖
+    
     if (action === 'add' && tagName && tag) {
       // 添加新标签到列表
       const existingTag = allTags.find(t => t.name === tagName);
@@ -454,6 +456,8 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       console.log('TagManager: 收到标签变化事件:', tags);
     }
     
+    // 移除justDragged判断，不再需要防止排序逻辑覆盖
+    
     // 安全地处理标签数据，使用更宽松的过滤条件确保所有有效标签都被保留
     const flattenedTags = flattenTags(tags);
     const validTags = flattenedTags.filter(tag => {
@@ -465,8 +469,18 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
     });
     
     setAllTags(validTags);
+    
+    // 构建标签层次结构
+    const { hierarchy, rootTags } = buildTagHierarchy(validTags);
+    setTagHierarchy(hierarchy);
+    
+    // 扁平化标签树用于显示
+    const flattenedTagTree = flattenTagTree(rootTags);
+    setVisibleTags(flattenedTagTree);
+    
     if (favoriteConfig.enableLogging) {
       console.log('TagManager: 标签列表已更新，保留所有标签，标签数量:', validTags.length);
+      console.log('TagManager: 标签层次结构已重新构建，根标签数量:', rootTags.length);
     }
     
     if (onTagsChange) {
@@ -540,7 +554,7 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           console.log('加载本地标签数据...');
         }
         
-        // 强制从数据库重新加载最新数据
+        // 移除justDragged判断，直接从数据库重新加载最新数据
         await localConfigManager.loadFromDatabase();
         
         // 从本地配置管理器获取同步后的标签和颜色数据
@@ -575,6 +589,8 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           console.log('TagManager: 收藏状态持久化优化已禁用，跳过localStorage加载');
         }
         
+        // 移除所有localStorage标签顺序加载相关代码
+        
         // 如果没有从localStorage加载收藏状态，也需要将收藏状态同步到标签对象
         if (favoriteTags.length === 0) {
           const tagsWithFavorites = tags.map(tag => ({
@@ -582,13 +598,33 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
             isFavorite: favoriteTags.includes(tag.name || tag.label || tag.title || tag.id || 'unknown')
           }));
           setAllTags(tagsWithFavorites); // 设置带有收藏状态的完整标签对象数组
+          
+          // 构建标签层次结构
+          const { hierarchy, rootTags } = buildTagHierarchy(tagsWithFavorites);
+          setTagHierarchy(hierarchy);
+          
+          // 扁平化标签树用于显示
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
+          
           if (favoriteConfig.enableLogging) {
             console.log('标签数据加载完成（无收藏状态）:', tagsWithFavorites);
+            console.log('标签层次结构已构建，根标签数量:', rootTags.length);
           }
         } else {
           setAllTags(tags); // 使用已经同步了收藏状态的tags数组
+          
+          // 构建标签层次结构
+          const { hierarchy, rootTags } = buildTagHierarchy(tags);
+          setTagHierarchy(hierarchy);
+          
+          // 扁平化标签树用于显示
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
+          
           if (favoriteConfig.enableLogging) {
             console.log('标签数据加载完成（有收藏状态）:', tags);
+            console.log('标签层次结构已构建，根标签数量:', rootTags.length);
           }
         }
         
@@ -1582,86 +1618,259 @@ useEffect(() => {
   const handleDragEnd = useCallback(async (event) => {
     const { active, over } = event;
     
+    setIsDragging(true); // 开始拖拽操作
+    
     if (active.id !== over.id) {
       const activeTag = allTags.find(tag => tag.id === active.id);
       const overTag = allTags.find(tag => tag.id === over.id);
       
-      if (!activeTag || !overTag) return;
+      if (!activeTag || !overTag) {
+        setIsDragging(false); // 结束拖拽操作
+        return;
+      }
       
       try {
+        // 检查是否尝试将父标签拖到另一个父标签下建立嵌套关系（不允许的操作）
+        // 但允许父标签之间的同级排序（调整顺序）
+        if (activeTag.isParent && overTag.isParent && activeTag.parentId !== overTag.parentId) {
+          // 只有当试图将一个父标签拖到另一个父标签下建立嵌套关系时才阻止
+          setIsDragging(false); // 结束拖拽操作
+          window.showToast('父标签不允许互相嵌套，父标签不能挪到父标签下', 'error');
+          console.log('禁止操作：尝试将父标签拖到另一个父标签下建立嵌套关系:', activeTag.name, '->', overTag.name);
+          return;
+        }
+        
         // 检查是否拖拽到父标签区域（建立父子关系）
-        if (overTag.isParent && activeTag.parentId !== overTag.id) {
-          // 将标签设置为父标签的子标签
-          await localConfigManager.updateTag(activeTag.id, { parentId: overTag.id });
+        // 父标签不允许互相嵌套，父标签不能挪到父标签下
+        if (overTag.isParent && activeTag.parentId !== overTag.id && !activeTag.isParent) {
+          // 立即更新本地状态，不等待数据库操作
+          const immediateUpdatedTags = allTags.map(tag => 
+            tag.id === activeTag.id ? { ...tag, parentId: overTag.id } : tag
+          );
+          setAllTags(immediateUpdatedTags);
           
-          // 获取更新后的标签数据
-          const updatedTags = localConfigManager.getTags();
-          setAllTags(updatedTags);
-          
-          // 重新构建标签层次结构和更新可见标签列表
-          const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+          // 立即重新构建标签层次结构和更新可见标签列表
+          const { hierarchy, rootTags } = buildTagHierarchy(immediateUpdatedTags);
           setTagHierarchy(hierarchy);
           const flattenedTags = flattenTagTree(rootTags);
           setVisibleTags(flattenedTags);
           
+          // 异步更新到本地配置管理器和数据库
+          setTimeout(async () => {
+            try {
+              await localConfigManager.updateTag(activeTag.id, { parentId: overTag.id });
+              
+              // 获取更新后的标签数据
+              const updatedTags = localConfigManager.getTags();
+              
+              // 获取扁平化的标签列表，确保包含所有标签（包括子标签）
+              const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+              const allFlattenedTags = flattenTagTree(rootTags);
+              
+              // 构建标签层次结构数据
+              const tagHierarchy = updatedTags.map(tag => ({
+                tagId: tag.id,
+                parentId: tag.parentId
+              }));
+              
+              // 使用updatedTags的索引作为sortOrder，确保排序一致性
+              const tagOrders = updatedTags.map((tag, index) => ({
+                tagId: tag.id,
+                sortOrder: index
+              }));
+              // 先更新本地配置管理器中的标签顺序
+              await localConfigManager.updateTagOrder(tagOrders);
+              // 再更新到数据库
+              await updateTagOrder(tagOrders, tagHierarchy);
+              console.log('标签顺序已异步更新到数据库和本地配置:', tagOrders);
+            } catch (error) {
+              console.error('异步更新标签顺序到数据库失败:', error);
+              // 不显示错误提示，因为UI已经更新，避免打扰用户
+            }
+          }, 0);
+          
+          setIsDragging(false); // 结束拖拽操作
           window.showToast(`标签 "${activeTag.name}" 已成为 "${overTag.name}" 的子标签`, 'success');
           console.log('标签已拖入父标签:', activeTag.name, '->', overTag.name);
           return;
         }
         
-        // 检查是否拖出父标签到根级别（脱离父子关系）
-        if (activeTag.parentId !== null && (overTag.parentId === null || !overTag.isParent)) {
-          // 更新标签的parentId为null
-          await localConfigManager.updateTag(activeTag.id, { parentId: null });
-          
-          // 检查原父标签是否还有其他子标签
-          const allTags = localConfigManager.getTags();
-          const oldParentId = activeTag.parentId;
-          const siblings = allTags.filter(t => t.parentId === oldParentId && t.id !== activeTag.id);
-          
-          if (siblings.length === 0) {
-            // 不再自动取消父标签状态，让用户明确决定是否要取消父标签状态
-            console.log('原父标签已失去所有子标签，但仍保持父标签状态:', oldParentId);
+        // 检查是否拖出父标签或与父标签交换位置
+        if (activeTag.parentId !== null) {
+          // 如果拖拽到父标签本身，实现位置交换
+          if (overTag.id === activeTag.parentId) {
+            // 立即更新本地状态，不等待数据库操作
+            const immediateUpdatedTags = allTags.map(tag => 
+              tag.id === activeTag.id ? { ...tag, parentId: null } : tag
+            );
+            setAllTags(immediateUpdatedTags);
+            
+            // 立即重新构建标签层次结构和更新可见标签列表
+            const { hierarchy, rootTags } = buildTagHierarchy(immediateUpdatedTags);
+            setTagHierarchy(hierarchy);
+            const flattenedTags = flattenTagTree(rootTags);
+            setVisibleTags(flattenedTags);
+            
+            // 异步更新到本地配置管理器和数据库
+            setTimeout(async () => {
+              try {
+                await localConfigManager.updateTag(activeTag.id, { parentId: null });
+                
+                // 获取更新后的标签数据
+                const updatedTags = localConfigManager.getTags();
+                
+                // 获取扁平化的标签列表，确保包含所有标签（包括子标签）
+                const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+                const allFlattenedTags = flattenTagTree(rootTags);
+                
+                // 构建标签层次结构数据
+                const tagHierarchy = updatedTags.map(tag => ({
+                  tagId: tag.id,
+                  parentId: tag.parentId
+                }));
+                
+                // 使用updatedTags的索引作为sortOrder，确保排序一致性
+                const tagOrders = updatedTags.map((tag, index) => ({
+                  tagId: tag.id,
+                  sortOrder: index
+                }));
+                // 先更新本地配置管理器中的标签顺序
+                await localConfigManager.updateTagOrder(tagOrders);
+                // 再更新到数据库
+                await updateTagOrder(tagOrders, tagHierarchy);
+                console.log('标签顺序已异步更新到数据库和本地配置:', tagOrders);
+              } catch (error) {
+                console.error('异步更新标签顺序到数据库失败:', error);
+                // 不显示错误提示，因为UI已经更新，避免打扰用户
+              }
+            }, 0);
+            
+            
+            setIsDragging(false); // 结束拖拽操作
+            window.showToast(`标签 "${activeTag.name}" 已与父标签 "${overTag.name}" 交换位置`, 'success');
+            console.log('子标签已与父标签交换位置:', activeTag.name, '->', overTag.name);
+            return;
           }
           
-          // 获取更新后的标签数据
-          const updatedTags = localConfigManager.getTags();
-          setAllTags(updatedTags);
-          
-          // 重新构建标签层次结构和更新可见标签列表
-          const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
-          setTagHierarchy(hierarchy);
-          const flattenedTags = flattenTagTree(rootTags);
-          setVisibleTags(flattenedTags);
-          
-          window.showToast(`标签 "${activeTag.name}" 已从父标签中移出`, 'success');
-          console.log('标签已拖出父标签:', activeTag.name);
-          return;
+          // 如果拖拽到根级别标签（没有父标签且不是父标签），也移出父标签
+          // 父标签可以拖到根级别，这是允许的操作
+          if (overTag.parentId === null && !overTag.isParent) {
+            // 立即更新本地状态，不等待数据库操作
+            const immediateUpdatedTags = allTags.map(tag => 
+              tag.id === activeTag.id ? { ...tag, parentId: null } : tag
+            );
+            setAllTags(immediateUpdatedTags);
+            
+            // 立即重新构建标签层次结构和更新可见标签列表
+            const { hierarchy, rootTags } = buildTagHierarchy(immediateUpdatedTags);
+            setTagHierarchy(hierarchy);
+            const flattenedTags = flattenTagTree(rootTags);
+            setVisibleTags(flattenedTags);
+            
+            // 异步更新到本地配置管理器和数据库
+            setTimeout(async () => {
+              try {
+                await localConfigManager.updateTag(activeTag.id, { parentId: null });
+                
+                // 检查原父标签是否还有其他子标签
+                const updatedTags = localConfigManager.getTags();
+                const oldParentId = activeTag.parentId;
+                const siblings = updatedTags.filter(t => t.parentId === oldParentId && t.id !== activeTag.id);
+                
+                if (siblings.length === 0) {
+                  console.log('原父标签已失去所有子标签，但仍保持父标签状态:', oldParentId);
+                }
+                
+                // 获取扁平化的标签列表，确保包含所有标签（包括子标签）
+                const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+                const allFlattenedTags = flattenTagTree(rootTags);
+                
+                // 构建标签层次结构数据
+                const tagHierarchy = updatedTags.map(tag => ({
+                  tagId: tag.id,
+                  parentId: tag.parentId
+                }));
+                
+                // 使用updatedTags的索引作为sortOrder，确保排序一致性
+                const tagOrders = updatedTags.map((tag, index) => ({
+                  tagId: tag.id,
+                  sortOrder: index
+                }));
+                // 先更新本地配置管理器中的标签顺序
+                await localConfigManager.updateTagOrder(tagOrders);
+                // 再更新到数据库
+                await updateTagOrder(tagOrders, tagHierarchy);
+                console.log('标签顺序已异步更新到数据库和本地配置:', tagOrders);
+              } catch (error) {
+                console.error('异步更新标签顺序到数据库失败:', error);
+                // 不显示错误提示，因为UI已经更新，避免打扰用户
+              }
+            }, 0);
+            
+            
+            setIsDragging(false); // 结束拖拽操作
+            window.showToast(`标签 "${activeTag.name}" 已从父标签中移出`, 'success');
+            console.log('标签已拖出父标签:', activeTag.name);
+            return;
+          }
         }
         
-        // 同级标签之间的排序（都有父标签或都没有父标签）
-        if ((activeTag.parentId === null && overTag.parentId === null) || 
-            (activeTag.parentId === overTag.parentId)) {
-          const oldIndex = visibleTags.findIndex(tag => tag.id === active.id);
-          const newIndex = visibleTags.findIndex(tag => tag.id === over.id);
+        // 处理同级标签排序
+        if (activeTag.parentId === overTag.parentId) {
+          // 同级标签之间的排序
+          const reorderedAllTags = [...allTags];
+          const activeIndex = reorderedAllTags.findIndex(tag => tag.id === active.id);
+          const overIndex = reorderedAllTags.findIndex(tag => tag.id === over.id);
           
-          const newVisibleTags = arrayMove(visibleTags, oldIndex, newIndex);
-          setVisibleTags(newVisibleTags);
-          
-          // 更新标签顺序到本地存储
-          const tagOrder = newVisibleTags.map(tag => tag.id);
-          localStorage.setItem('tagOrder', JSON.stringify(tagOrder));
-          console.log('标签顺序已更新:', tagOrder);
-        } else {
-          // 其他跨层级拖拽情况，静默处理
+          if (activeIndex !== -1 && overIndex !== -1) {
+            // 重新排序allTags
+            const [movedTag] = reorderedAllTags.splice(activeIndex, 1);
+            reorderedAllTags.splice(overIndex, 0, movedTag);
+            setAllTags(reorderedAllTags);
+            
+            // 异步更新到数据库
+            setTimeout(async () => {
+              try {
+                // 构建标签层次结构数据
+                const tagHierarchy = reorderedAllTags.map(tag => ({
+                  tagId: tag.id,
+                  parentId: tag.parentId
+                }));
+                
+                // 使用allTags的索引作为sortOrder，确保排序正确保存
+                const tagOrders = reorderedAllTags.map((tag, index) => ({
+                  tagId: tag.id,
+                  sortOrder: index
+                }));
+                
+                // 先更新本地配置管理器中的标签顺序
+                await localConfigManager.updateTagOrder(tagOrders);
+                // 再更新到数据库
+                await updateTagOrder(tagOrders, tagHierarchy);
+                console.log('标签顺序已更新到数据库和本地配置:', tagOrders);
+              } catch (error) {
+                console.error('更新标签顺序到数据库失败:', error);
+              }
+            }, 0);
+            
+            setIsDragging(false);
+            window.showToast(`标签 "${activeTag.name}" 顺序已更新`, 'success');
+            console.log('同级标签排序:', activeTag.name, '->', overTag.name);
+            return;
+          }
         }
         
       } catch (error) {
         console.error('拖拽操作失败:', error);
         window.showToast('拖拽操作失败，请重试', 'error');
+      } finally {
+        setIsDragging(false); // 结束拖拽操作
       }
+    } else {
+      // 拖拽到原位置，直接结束拖拽状态
+      setIsDragging(false); // 结束拖拽操作
     }
-  }, [visibleTags, allTags]);
+  }, [visibleTags, allTags, isDragging]);
   
   // Intersection Observer回调
   const handleObserver = useCallback((entries) => {
@@ -1694,13 +1903,20 @@ useEffect(() => {
   
   // 更新可见标签
   useEffect(() => {
-    const { hierarchy, rootTags } = buildTagHierarchy(allTags);
+    if (isDragging) return; // 如果正在拖拽，不执行此effect
+    // 移除justDragged判断，不再需要防止排序逻辑覆盖
+    
+    // 移除所有localStorage排序相关代码，直接使用原始标签顺序
+    const orderedAllTags = [...allTags];
+    
+    // 使用排序后的标签数据构建层次结构
+    const { hierarchy, rootTags } = buildTagHierarchy(orderedAllTags);
     setTagHierarchy(hierarchy);
     
     const flattenedTags = flattenTagTree(rootTags);
     
     // 应用搜索过滤
-    const filteredTags = filterTags(flattenedTags, searchTerm);
+    let filteredTags = filterTags(flattenedTags, searchTerm);
     
     // 分页加载
     const startIndex = 0;
@@ -1709,7 +1925,7 @@ useEffect(() => {
     
     setVisibleTags(paginatedTags);
     setHasMore(endIndex < filteredTags.length);
-  }, [allTags, page, buildTagHierarchy, flattenTagTree, searchTerm]);
+  }, [allTags, page, buildTagHierarchy, flattenTagTree, searchTerm, isDragging]);
   
   // 更新lastTagRef
   useEffect(() => {
@@ -1751,7 +1967,7 @@ useEffect(() => {
       >
         {/* 标签项 */}
         <div 
-          className={`tag-item flex items-center w-full p-2 mb-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+          className={`tag-item flex items-center w-full p-2 mb-1 rounded-lg cursor-pointer ${
             tag.isPinned ? 'border-l-4 border-blue-500' : ''
           } ${selectedTag && selectedTag.id === tag.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${
             isDragTarget ? 'bg-blue-100 dark:bg-blue-800/50 border-2 border-blue-400' : ''
@@ -1759,8 +1975,7 @@ useEffect(() => {
             isRootDropTarget ? 'bg-green-100 dark:bg-green-800/50 border-2 border-green-400' : ''
           }`}
           style={{ 
-            paddingLeft: `${8 + tag.level * 20}px`,
-            opacity: transform ? 0.8 : 1
+            paddingLeft: `${8 + tag.level * 20}px`
           }}
           onClick={() => handleTagClick(tag)}
         >
@@ -1873,20 +2088,22 @@ useEffect(() => {
               {tag.isPinned ? '取消置顶' : '标签置顶'}
             </button>
             
-            {/* 收藏标签 */}
-            <button
-              onClick={() => handleMenuAction('favorite', tag)}
-              className="w-full text-left px-3 py-2 text-sm flex items-center border-0 transition-colors"
-              style={{
-                backgroundColor: 'transparent',
-                color: 'var(--theme-text)'
-              }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--theme-surface)'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-            >
-              <FiStar className={`mr-2 ${tag.isFavorite ? 'text-yellow-500 fill-current' : ''}`} size={14} />
-              {tag.isFavorite ? '取消收藏' : '收藏标签'}
-            </button>
+            {/* 收藏标签 - 父标签不显示 */}
+            {!tag.isParent && (
+              <button
+                onClick={() => handleMenuAction('favorite', tag)}
+                className="w-full text-left px-3 py-2 text-sm flex items-center border-0 transition-colors"
+                style={{
+                  backgroundColor: 'transparent',
+                  color: 'var(--theme-text)'
+                }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--theme-surface)'}
+                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+              >
+                <FiStar className={`mr-2 ${tag.isFavorite ? 'text-yellow-500 fill-current' : ''}`} size={14} />
+                {tag.isFavorite ? '取消收藏' : '收藏标签'}
+              </button>
+            )}
             
             {/* 父标签特殊功能 */}
             {tag.parentId ? (

@@ -85,13 +85,31 @@ class LocalConfigManager {
     try {
       const response = await fetchConfig();
       if (response.data) {
+        // 对标签数据进行字段转换和排序
+        const processedTags = (response.data.tags || DEFAULT_CONFIG.tags).map(tag => ({
+          ...tag,
+          // 将数据库的parent_id字段转换为前端的parentId字段
+          parentId: tag.parent_id !== null ? tag.parent_id : null,
+          // 确保sort_order字段存在
+          sort_order: tag.sort_order !== undefined ? tag.sort_order : 0
+        }));
+        
+        const sortedTags = processedTags.sort((a, b) => {
+          // 如果有sort_order字段，按照sort_order排序
+          if (a.sort_order !== undefined && b.sort_order !== undefined) {
+            return a.sort_order - b.sort_order;
+          }
+          // 如果没有sort_order字段，按照id排序作为后备
+          return a.id - b.id;
+        });
+        
         this.config = {
-          tags: response.data.tags || DEFAULT_CONFIG.tags,
+          tags: sortedTags,
           tagColors: response.data.tagColors || DEFAULT_CONFIG.tagColors,
           userPreferences: response.data.userPreferences || DEFAULT_CONFIG.userPreferences
         };
         this.isOnline = true;
-        console.log('从数据库加载配置成功');
+        console.log('从数据库加载配置成功，标签已按sort_order排序');
         
         // 通知监听器数据已更新
         this.notifyListeners('tagsChanged', this.config.tags);
@@ -111,15 +129,23 @@ class LocalConfigManager {
     try {
       this.syncInProgress = true;
       
+      // 为标签添加sort_order字段和parent_id字段转换
+      const tagsWithOrder = this.config.tags.map((tag, index) => ({
+        ...tag,
+        sort_order: tag.sort_order !== undefined ? tag.sort_order : index,
+        // 将前端的parentId字段转换为数据库的parent_id字段
+        parent_id: tag.parentId !== null ? tag.parentId : null
+      }));
+      
       const configData = {
-        tags: this.config.tags,
+        tags: tagsWithOrder,
         tagColors: this.config.tagColors,
         userPreferences: this.config.userPreferences
       };
       
       await saveConfig(configData);
       this.isOnline = true;
-      console.log('配置保存到数据库成功');
+      console.log('配置保存到数据库成功（包含sort_order字段）');
       
     } catch (error) {
       console.error('保存配置到数据库失败:', error);
@@ -250,6 +276,37 @@ class LocalConfigManager {
     this.notifyListeners('tagsChanged', this.config.tags);
 
     return tag;
+  }
+
+  // 更新标签顺序
+  async updateTagOrder(tagOrders) {
+    if (!tagOrders || !Array.isArray(tagOrders)) {
+      throw new Error('标签顺序数据格式不正确');
+    }
+
+    // 更新每个标签的sort_order字段
+    for (const orderData of tagOrders) {
+      const { tagId, sortOrder } = orderData;
+      const tag = this.findTagById(tagId);
+      
+      if (tag) {
+        tag.sort_order = sortOrder;
+      }
+    }
+
+    // 按sort_order重新排序标签
+    this.config.tags.sort((a, b) => {
+      if (a.sort_order !== undefined && b.sort_order !== undefined) {
+        return a.sort_order - b.sort_order;
+      }
+      return a.id - b.id;
+    });
+
+    await this.syncConfig();
+    this.notifyListeners('tagsChanged', this.config.tags);
+    
+    console.log('标签顺序已更新到本地配置:', tagOrders);
+    return true;
   }
 
   // 删除标签
