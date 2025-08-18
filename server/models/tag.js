@@ -21,6 +21,7 @@ class TagModel {
             user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             color TEXT DEFAULT 'blue',
+            sort_order INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id),
@@ -36,7 +37,16 @@ class TagModel {
           });
         } else {
           console.log('标签表已存在');
-          resolve();
+          // 检查是否需要添加sort_order字段
+          this.db.run(`ALTER TABLE tags ADD COLUMN sort_order INTEGER DEFAULT 0`, (err) => {
+            if (err) {
+              // 字段可能已存在，忽略错误
+              console.log('sort_order字段已存在或添加失败:', err.message);
+            } else {
+              console.log('sort_order字段添加成功');
+            }
+            resolve();
+          });
         }
       });
     });
@@ -100,8 +110,8 @@ class TagModel {
       }
 
       this.db.all(
-        `SELECT id, name, color, created_at, updated_at FROM tags 
-         WHERE user_id = ? ORDER BY name ASC`,
+        `SELECT id, name, color, sort_order, created_at, updated_at FROM tags 
+         WHERE user_id = ? ORDER BY sort_order ASC, name ASC`,
         [userId],
         (err, rows) => {
           if (err) {
@@ -147,7 +157,7 @@ class TagModel {
         return;
       }
 
-      const allowedFields = ['name', 'color'];
+      const allowedFields = ['name', 'color', 'sort_order'];
       const updateFields = [];
       const updateValues = [];
 
