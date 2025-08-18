@@ -1653,8 +1653,7 @@ useEffect(() => {
           localStorage.setItem('tagOrder', JSON.stringify(tagOrder));
           console.log('标签顺序已更新:', tagOrder);
         } else {
-          // 其他跨层级拖拽情况，提示用户使用菜单操作
-          window.showToast('请使用菜单操作来建立父子标签关系', 'warning');
+          // 其他跨层级拖拽情况，静默处理
         }
         
       } catch (error) {
