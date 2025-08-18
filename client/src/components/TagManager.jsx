@@ -1010,7 +1010,7 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
         break;
         
       case 'dissolveParent':
-        // 解散父标签功能
+        // 解散父标签功能 - 只解散父子关系，不删除/移出父标签
         try {
           console.log('开始解散父标签:', tag.name);
           
@@ -1030,6 +1030,53 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           // 直接获取更新后的标签数据，不重新从数据库加载
           const updatedTags = localConfigManager.getTags();
           setAllTags(updatedTags);
+          
+          // 重新构建标签层次结构和更新可见标签列表
+          const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+          setTagHierarchy(hierarchy);
+          
+          // 扁平化标签树用于显示
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
+          
+          // 触发笔记列表刷新
+          try {
+            if (typeof window.refreshNotes === 'function') {
+              window.refreshNotes();
+            }
+          } catch (error) {
+            console.warn('refreshNotes函数调用失败:', error);
+          }
+          
+          // 触发标签刷新，确保缓存完全更新
+          try {
+            if (typeof window.refreshTags === 'function') {
+              window.refreshTags();
+            }
+          } catch (error) {
+            console.warn('refreshTags函数调用失败:', error);
+          }
+          
+          // 添加延迟强制刷新，确保所有状态更新完成
+          setTimeout(async () => {
+            try {
+              // 重新获取最新的标签数据
+              const latestTags = localConfigManager.getTags();
+              setAllTags(latestTags);
+              
+              // 重新构建标签层次结构
+              const { hierarchy, rootTags } = buildTagHierarchy(latestTags);
+              setTagHierarchy(hierarchy);
+              
+              // 重新扁平化标签树
+              const flattenedTags = flattenTagTree(rootTags);
+              setVisibleTags(flattenedTags);
+              
+              console.log('解散父标签后强制刷新完成');
+            } catch (error) {
+              console.error('解散父标签后强制刷新失败:', error);
+            }
+          }, 100);
           
           window.showToast(`父标签 "${tag.name}" 已解散，${childTags.length} 个子标签已回到主列表`, 'success');
           console.log('父标签解散完成:', tag.name);
@@ -1400,47 +1447,12 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       if (tag.name && tag.name.toLowerCase().includes(term)) {
         filteredTagIds.add(tag.id);
         
-        // 如果是父标签，包含所有子标签
+        // 如果是父标签，只包含那些parentId等于该父标签id的直接子标签
         if (tag.isParent) {
           const childTags = tags.filter(t => t.parentId === tag.id);
           childTags.forEach(child => filteredTagIds.add(child.id));
         }
-        
-        // 如果是子标签，也包含其父标签
-        if (tag.parentId) {
-          const parentTag = tags.find(t => t.id === tag.parentId);
-          if (parentTag) {
-            filteredTagIds.add(parentTag.id);
-          }
-        }
-      }
-    });
-    
-    // 额外检查：确保所有匹配的子标签都被正确处理
-    tags.forEach(tag => {
-      // 如果这个标签是子标签且名称匹配搜索词
-      if (tag.parentId && tag.name && tag.name.toLowerCase().includes(term)) {
-        // 确保子标签被包含
-        filteredTagIds.add(tag.id);
-        
-        // 确保父标签被包含
-        const parentTag = tags.find(t => t.id === tag.parentId);
-        if (parentTag) {
-          filteredTagIds.add(parentTag.id);
-        }
-      }
-    });
-    
-    // 额外检查：如果搜索词匹配父标签名称，确保只显示该父标签和其直接子标签
-    tags.forEach(tag => {
-      // 如果这个标签是父标签且名称匹配搜索词
-      if (tag.isParent && tag.name && tag.name.toLowerCase().includes(term)) {
-        // 确保父标签被包含
-        filteredTagIds.add(tag.id);
-        
-        // 只包含直接子标签
-        const directChildren = tags.filter(t => t.parentId === tag.id);
-        directChildren.forEach(child => filteredTagIds.add(child.id));
+        // 注意：不再添加父标签，避免同级标签筛选父标签的问题
       }
     });
     
@@ -1987,7 +1999,7 @@ useEffect(() => {
               title={tag.isParent ? "拖拽以重新排序或拖入此父标签" : tag.parentId ? "拖拽以重新排序或拖出到根级别" : "拖拽以重新排序或拖入父标签"}
             >
             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+              <path d="M3 7h14a1 1 0 0 1 0 2H3a1 1 0 0 1 0-2zm0 4h14a1 1 0 0 1 0 2H3a1 1 0 0 1 0-2zm0 4h14a1 1 0 0 1 0 2H3a1 1 0 0 1 0-2z" />
             </svg>
           </div>
           

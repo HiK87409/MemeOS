@@ -323,7 +323,8 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
     const handleTagFilterChanged = (event) => {
       const { tagName } = event.detail || {};
       console.log('🎯 HomePage收到标签筛选变化事件:', { tagName });
-      // 这里可以添加额外的UI更新逻辑
+      // 重新加载标签数据以确保状态同步
+      loadAvailableTags();
     };
 
     // 监听筛选清除事件
@@ -331,18 +332,36 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
       console.log('🎯 HomePage收到筛选清除事件');
       // 强制重新渲染以更新UI状态
       setForceRender(prev => prev + 1);
+      // 重新加载标签数据以确保状态同步
+      loadAvailableTags();
     };
 
+    // 监听localConfigManager的标签变化事件
+    const handleTagsChanged = (tags) => {
+      console.log('🎯 HomePage收到标签变化事件，更新availableTags');
+      setAvailableTags(tags);
+      // 如果当前有选中的标签，重新加载笔记以确保筛选逻辑正确
+      if (selectedTag) {
+        loadNotes();
+      }
+    };
+
+    // 添加事件监听器
     window.addEventListener('tagColorsUpdated', handleTagColorsUpdated);
     window.addEventListener('tagFilterChanged', handleTagFilterChanged);
     window.addEventListener('filterCleared', handleFilterCleared);
+    
+    // 添加localConfigManager监听器
+    localConfigManager.addListener('tagsChanged', handleTagsChanged);
     
     return () => {
       window.removeEventListener('tagColorsUpdated', handleTagColorsUpdated);
       window.removeEventListener('tagFilterChanged', handleTagFilterChanged);
       window.removeEventListener('filterCleared', handleFilterCleared);
+      // 移除localConfigManager监听器
+      localConfigManager.removeListener('tagsChanged', handleTagsChanged);
     };
-  }, []);
+  }, [selectedTag]);
   
   // 获取标签颜色的辅助函数
   const getTagStyleFromState = (tagName) => {
@@ -389,7 +408,7 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
     
     console.log('getTagsToFilter输入:', { tagInput, tagName, allTags: allTags.slice(0, 3) }); // 调试日志
     
-    const tagsToFilter = new Set([tagName]);
+    const tagsToFilter = new Set();
     
     // 递归函数来收集所有子标签
     const collectChildren = (tag) => {
@@ -420,39 +439,21 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
     });
     
     if (targetTag) {
-      // 收集所有子标签（包括嵌套的子标签）
-      collectChildren(targetTag);
+      // 检查目标标签是否有父标签
+      const hasParent = targetTag.parentId !== null && targetTag.parentId !== undefined;
       
-      // 查找所有父标签
-      const findParents = (currentTagName, visited = new Set()) => {
-        if (visited.has(currentTagName)) return;
-        visited.add(currentTagName);
-        
-        // 找到当前标签对象
-        const currentTag = allTags.find(tag => {
-          if (typeof tag === 'string') {
-            return tag === currentTagName;
-          }
-          return tag.name === currentTagName;
-        });
-        
-        if (currentTag && currentTag.parentId) {
-          // 基于parentId查找父标签
-          const parentTag = allTags.find(tag => tag.id === currentTag.parentId);
-          if (parentTag) {
-            const parentName = typeof parentTag === 'string' ? parentTag : parentTag.name;
-            if (parentName && !tagsToFilter.has(parentName)) {
-              tagsToFilter.add(parentName);
-              console.log('添加父标签到筛选列表:', parentName); // 调试日志
-              // 递归查找父标签的父标签
-              findParents(parentName, visited);
-            }
-          }
-        }
-      };
+      // 检查目标标签是否有子标签
+      const hasChildren = allTags.some(t => t.parentId === targetTag.id);
       
-      // 查找所有父标签（包括多级父标签）
-      findParents(tagName);
+      if (!hasParent && hasChildren) {
+        // 如果是顶级父标签（没有父标签但有子标签），添加该父标签及其所有子标签
+        tagsToFilter.add(tagName);
+        collectChildren(targetTag);
+      } else {
+        // 如果是子标签（有父标签）或独立标签（没有父标签也没有子标签），只添加该标签本身
+        // 重要：不添加父标签，避免独立标签或子标签筛选时包含父标签
+        tagsToFilter.add(tagName);
+      }
     }
     
     const result = Array.from(tagsToFilter);

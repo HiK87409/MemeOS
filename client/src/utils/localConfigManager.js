@@ -63,8 +63,18 @@ class LocalConfigManager {
         const savedColors = localStorage.getItem(CONFIG_KEYS.TAG_COLORS);
         const savedPreferences = localStorage.getItem(CONFIG_KEYS.USER_PREFERENCES);
 
+        // 对从本地存储加载的标签数据进行字段转换，确保数据结构一致
+        const parsedTags = savedConfig ? JSON.parse(savedConfig) : DEFAULT_CONFIG.tags;
+        const processedTags = parsedTags.map(tag => ({
+          ...tag,
+          // 将数据库的parent_id字段转换为前端的parentId字段（兼容旧数据）
+          parentId: tag.parent_id !== null ? tag.parent_id : (tag.parentId || null),
+          // 确保sort_order字段存在
+          sort_order: tag.sort_order !== undefined ? tag.sort_order : (tag.sort_order || 0)
+        }));
+
         this.config = {
-          tags: savedConfig ? JSON.parse(savedConfig) : DEFAULT_CONFIG.tags,
+          tags: processedTags,
           tagColors: savedColors ? JSON.parse(savedColors) : DEFAULT_CONFIG.tagColors,
           userPreferences: savedPreferences ? JSON.parse(savedPreferences) : DEFAULT_CONFIG.userPreferences
         };
@@ -228,7 +238,15 @@ class LocalConfigManager {
 
   // 获取所有标签
   getTags() {
-    return deepClone(this.config.tags);
+    // 确保返回的标签数据使用统一的字段格式
+    const tags = deepClone(this.config.tags);
+    return tags.map(tag => ({
+      ...tag,
+      // 统一使用parentId字段，兼容旧数据中的parent_id
+      parentId: tag.parent_id !== null ? tag.parent_id : (tag.parentId || null),
+      // 确保sort_order字段存在
+      sort_order: tag.sort_order !== undefined ? tag.sort_order : 0
+    }));
   }
 
   // 获取标签颜色映射
@@ -452,6 +470,33 @@ class LocalConfigManager {
       return true;
     } catch (error) {
       console.error('清除数据失败:', error);
+      return false;
+    }
+  }
+
+  // 清除本地缓存并重新从数据库加载
+  async clearCacheAndReload() {
+    try {
+      console.log('清除本地缓存并重新从数据库加载...');
+      
+      // 清除本地存储
+      localStorage.removeItem(CONFIG_KEYS.TAGS);
+      localStorage.removeItem(CONFIG_KEYS.TAG_COLORS);
+      localStorage.removeItem(CONFIG_KEYS.USER_PREFERENCES);
+      
+      // 重置配置为默认值
+      this.config = deepClone(DEFAULT_CONFIG);
+      
+      // 强制从数据库重新加载
+      await this.loadFromDatabase();
+      
+      // 保存到本地存储
+      this.saveToLocalStorage();
+      
+      console.log('缓存清除并重新加载完成');
+      return true;
+    } catch (error) {
+      console.error('清除缓存并重新加载失败:', error);
       return false;
     }
   }
