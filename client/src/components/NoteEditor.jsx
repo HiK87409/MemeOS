@@ -365,7 +365,7 @@ const NoteEditor = ({
     };
   }, []);
 
-  // 监听从当前笔记中移除标签事件
+  // 监nfrom当前笔记中移除标签事件
   useEffect(() => {
     const handleRemoveTagFromNote = (event) => {
       const { tagName } = event.detail || {};
@@ -1143,6 +1143,7 @@ const NoteEditor = ({
   const borderColor = computedStyle.getPropertyValue('--theme-border').trim() || '#e5e7eb';
 
   // 获取编辑器样式
+  // 获取编辑器样式
   const getEditorStyle = () => {
     
     if (cardStyle && cardSettings) {
@@ -1150,17 +1151,13 @@ const NoteEditor = ({
       return {
         ...cardStyle,
         backgroundColor: getEditorBackgroundColor() + ' !important',
-        borderColor: 'var(--theme-border)',
         padding: '1rem'
       };
     }
     
-    // 默认样式，也使用智能背景色
+    // 默认样式，也使用智能背景色，移除边框
     return {
       backgroundColor: getEditorBackgroundColor() + ' !important', 
-      borderWidth: '1px',
-      borderStyle: 'solid',
-      borderColor: 'var(--theme-border)',
       borderRadius: `${cardSettings?.borderRadius || 8}px`,
       boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
       padding: '1rem'
