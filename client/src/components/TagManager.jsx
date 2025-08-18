@@ -469,8 +469,18 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
     });
     
     setAllTags(validTags);
+    
+    // 构建标签层次结构
+    const { hierarchy, rootTags } = buildTagHierarchy(validTags);
+    setTagHierarchy(hierarchy);
+    
+    // 扁平化标签树用于显示
+    const flattenedTagTree = flattenTagTree(rootTags);
+    setVisibleTags(flattenedTagTree);
+    
     if (favoriteConfig.enableLogging) {
       console.log('TagManager: 标签列表已更新，保留所有标签，标签数量:', validTags.length);
+      console.log('TagManager: 标签层次结构已重新构建，根标签数量:', rootTags.length);
     }
     
     if (onTagsChange) {
@@ -588,13 +598,33 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
             isFavorite: favoriteTags.includes(tag.name || tag.label || tag.title || tag.id || 'unknown')
           }));
           setAllTags(tagsWithFavorites); // 设置带有收藏状态的完整标签对象数组
+          
+          // 构建标签层次结构
+          const { hierarchy, rootTags } = buildTagHierarchy(tagsWithFavorites);
+          setTagHierarchy(hierarchy);
+          
+          // 扁平化标签树用于显示
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
+          
           if (favoriteConfig.enableLogging) {
             console.log('标签数据加载完成（无收藏状态）:', tagsWithFavorites);
+            console.log('标签层次结构已构建，根标签数量:', rootTags.length);
           }
         } else {
           setAllTags(tags); // 使用已经同步了收藏状态的tags数组
+          
+          // 构建标签层次结构
+          const { hierarchy, rootTags } = buildTagHierarchy(tags);
+          setTagHierarchy(hierarchy);
+          
+          // 扁平化标签树用于显示
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
+          
           if (favoriteConfig.enableLogging) {
             console.log('标签数据加载完成（有收藏状态）:', tags);
+            console.log('标签层次结构已构建，根标签数量:', rootTags.length);
           }
         }
         
@@ -1637,12 +1667,22 @@ useEffect(() => {
               const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
               const allFlattenedTags = flattenTagTree(rootTags);
               
-              const tagOrders = allFlattenedTags.map((tag, index) => ({
+              // 构建标签层次结构数据
+              const tagHierarchy = updatedTags.map(tag => ({
+                tagId: tag.id,
+                parentId: tag.parentId
+              }));
+              
+              // 使用updatedTags的索引作为sortOrder，确保排序一致性
+              const tagOrders = updatedTags.map((tag, index) => ({
                 tagId: tag.id,
                 sortOrder: index
               }));
-              await updateTagOrder(tagOrders);
-              console.log('标签顺序已异步更新到数据库:', tagOrders);
+              // 先更新本地配置管理器中的标签顺序
+              await localConfigManager.updateTagOrder(tagOrders);
+              // 再更新到数据库
+              await updateTagOrder(tagOrders, tagHierarchy);
+              console.log('标签顺序已异步更新到数据库和本地配置:', tagOrders);
             } catch (error) {
               console.error('异步更新标签顺序到数据库失败:', error);
               // 不显示错误提示，因为UI已经更新，避免打扰用户
@@ -1683,12 +1723,22 @@ useEffect(() => {
                 const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
                 const allFlattenedTags = flattenTagTree(rootTags);
                 
-                const tagOrders = allFlattenedTags.map((tag, index) => ({
+                // 构建标签层次结构数据
+                const tagHierarchy = updatedTags.map(tag => ({
+                  tagId: tag.id,
+                  parentId: tag.parentId
+                }));
+                
+                // 使用updatedTags的索引作为sortOrder，确保排序一致性
+                const tagOrders = updatedTags.map((tag, index) => ({
                   tagId: tag.id,
                   sortOrder: index
                 }));
-                await updateTagOrder(tagOrders);
-                console.log('标签顺序已异步更新到数据库:', tagOrders);
+                // 先更新本地配置管理器中的标签顺序
+                await localConfigManager.updateTagOrder(tagOrders);
+                // 再更新到数据库
+                await updateTagOrder(tagOrders, tagHierarchy);
+                console.log('标签顺序已异步更新到数据库和本地配置:', tagOrders);
               } catch (error) {
                 console.error('异步更新标签顺序到数据库失败:', error);
                 // 不显示错误提示，因为UI已经更新，避免打扰用户
@@ -1735,12 +1785,22 @@ useEffect(() => {
                 const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
                 const allFlattenedTags = flattenTagTree(rootTags);
                 
-                const tagOrders = allFlattenedTags.map((tag, index) => ({
+                // 构建标签层次结构数据
+                const tagHierarchy = updatedTags.map(tag => ({
+                  tagId: tag.id,
+                  parentId: tag.parentId
+                }));
+                
+                // 使用updatedTags的索引作为sortOrder，确保排序一致性
+                const tagOrders = updatedTags.map((tag, index) => ({
                   tagId: tag.id,
                   sortOrder: index
                 }));
-                await updateTagOrder(tagOrders);
-                console.log('标签顺序已异步更新到数据库:', tagOrders);
+                // 先更新本地配置管理器中的标签顺序
+                await localConfigManager.updateTagOrder(tagOrders);
+                // 再更新到数据库
+                await updateTagOrder(tagOrders, tagHierarchy);
+                console.log('标签顺序已异步更新到数据库和本地配置:', tagOrders);
               } catch (error) {
                 console.error('异步更新标签顺序到数据库失败:', error);
                 // 不显示错误提示，因为UI已经更新，避免打扰用户
@@ -1758,43 +1818,45 @@ useEffect(() => {
         // 处理同级标签排序
         if (activeTag.parentId === overTag.parentId) {
           // 同级标签之间的排序
-          const oldIndex = visibleTags.findIndex(tag => tag.id === active.id);
-          const newIndex = visibleTags.findIndex(tag => tag.id === over.id);
+          const reorderedAllTags = [...allTags];
+          const activeIndex = reorderedAllTags.findIndex(tag => tag.id === active.id);
+          const overIndex = reorderedAllTags.findIndex(tag => tag.id === over.id);
           
-          if (oldIndex !== -1 && newIndex !== -1) {
-            // 重新排序可见标签
-            const reorderedVisibleTags = arrayMove(visibleTags, oldIndex, newIndex);
-            setVisibleTags(reorderedVisibleTags);
+          if (activeIndex !== -1 && overIndex !== -1) {
+            // 重新排序allTags
+            const [movedTag] = reorderedAllTags.splice(activeIndex, 1);
+            reorderedAllTags.splice(overIndex, 0, movedTag);
+            setAllTags(reorderedAllTags);
             
-            // 更新allTags中的顺序
-            const reorderedAllTags = [...allTags];
-            const activeIndex = reorderedAllTags.findIndex(tag => tag.id === active.id);
-            const overIndex = reorderedAllTags.findIndex(tag => tag.id === over.id);
+            // 异步更新到数据库
+            setTimeout(async () => {
+              try {
+                // 构建标签层次结构数据
+                const tagHierarchy = reorderedAllTags.map(tag => ({
+                  tagId: tag.id,
+                  parentId: tag.parentId
+                }));
+                
+                // 使用allTags的索引作为sortOrder，确保排序正确保存
+                const tagOrders = reorderedAllTags.map((tag, index) => ({
+                  tagId: tag.id,
+                  sortOrder: index
+                }));
+                
+                // 先更新本地配置管理器中的标签顺序
+                await localConfigManager.updateTagOrder(tagOrders);
+                // 再更新到数据库
+                await updateTagOrder(tagOrders, tagHierarchy);
+                console.log('标签顺序已更新到数据库和本地配置:', tagOrders);
+              } catch (error) {
+                console.error('更新标签顺序到数据库失败:', error);
+              }
+            }, 0);
             
-            if (activeIndex !== -1 && overIndex !== -1) {
-              const [movedTag] = reorderedAllTags.splice(activeIndex, 1);
-              reorderedAllTags.splice(overIndex, 0, movedTag);
-              setAllTags(reorderedAllTags);
-              
-              // 异步更新到数据库
-              setTimeout(async () => {
-                try {
-                  const tagOrders = reorderedAllTags.map((tag, index) => ({
-                    tagId: tag.id,
-                    sortOrder: index
-                  }));
-                  await updateTagOrder(tagOrders);
-                  console.log('标签顺序已更新到数据库:', tagOrders);
-                } catch (error) {
-                  console.error('更新标签顺序到数据库失败:', error);
-                }
-              }, 0);
-              
-              setIsDragging(false);
-              window.showToast(`标签 "${activeTag.name}" 顺序已更新`, 'success');
-              console.log('同级标签排序:', activeTag.name, '->', overTag.name);
-              return;
-            }
+            setIsDragging(false);
+            window.showToast(`标签 "${activeTag.name}" 顺序已更新`, 'success');
+            console.log('同级标签排序:', activeTag.name, '->', overTag.name);
+            return;
           }
         }
         

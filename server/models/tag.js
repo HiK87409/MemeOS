@@ -22,6 +22,7 @@ class TagModel {
             name TEXT NOT NULL,
             color TEXT DEFAULT 'blue',
             sort_order INTEGER DEFAULT 0,
+            parent_id INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id),
@@ -110,7 +111,7 @@ class TagModel {
       }
 
       this.db.all(
-        `SELECT id, name, color, sort_order, created_at, updated_at FROM tags 
+        `SELECT id, name, color, sort_order, parent_id, created_at, updated_at FROM tags 
          WHERE user_id = ? ORDER BY sort_order ASC, name ASC`,
         [userId],
         (err, rows) => {
@@ -157,7 +158,7 @@ class TagModel {
         return;
       }
 
-      const allowedFields = ['name', 'color', 'sort_order'];
+      const allowedFields = ['name', 'color', 'sort_order', 'parent_id'];
       const updateFields = [];
       const updateValues = [];
 
@@ -250,7 +251,7 @@ class TagModel {
       }
 
       this.db.get(
-        `SELECT id, name, color, created_at, updated_at FROM tags 
+        `SELECT id, name, color, parent_id, sort_order, created_at, updated_at FROM tags 
          WHERE user_id = ? AND id = ?`,
         [userId, tagId],
         (err, row) => {
@@ -274,7 +275,7 @@ class TagModel {
       }
 
       this.db.get(
-        `SELECT id, name, color, created_at, updated_at FROM tags 
+        `SELECT id, name, color, parent_id, sort_order, created_at, updated_at FROM tags 
          WHERE user_id = ? AND name = ?`,
         [userId, tagName],
         (err, row) => {

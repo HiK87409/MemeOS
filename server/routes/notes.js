@@ -1346,10 +1346,10 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
     }
   });
 
-  // 更新标签顺序
+  // 更新标签顺序（重新实现，支持父子标签关系）
   router.put('/tags/order', async (req, res) => {
     try {
-      const { tagOrders } = req.body;
+      const { tagOrders, tagHierarchy } = req.body;
       
       if (!tagOrders || !Array.isArray(tagOrders)) {
         return res.status(400).json({ error: '标签顺序数据格式不正确' });
@@ -1358,10 +1358,11 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
       // 使用全局userId常量
       const results = {
         updated: [],
-        errors: []
+        errors: [],
+        hierarchyUpdated: false
       };
 
-      // 批量更新标签顺序
+      // 首先更新所有标签的sort_order字段
       for (const orderData of tagOrders) {
         try {
           const { tagId, sortOrder } = orderData;
@@ -1396,17 +1397,58 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
         }
       }
 
-      // 获取更新后的完整标签列表
+      // 如果提供了标签层次结构数据，同时更新父子关系
+      if (tagHierarchy && Array.isArray(tagHierarchy)) {
+        try {
+          // 先将所有标签的parentId设置为null（清除现有关系）
+          const allTags = await tagModel.getAllTags(userId);
+          for (const tag of allTags) {
+            await tagModel.updateTag(userId, tag.id, { parent_id: null });
+          }
+          
+          // 根据层次结构重新建立父子关系
+          for (const hierarchyData of tagHierarchy) {
+            const { tagId, parentId } = hierarchyData;
+            
+            if (!tagId) {
+              results.errors.push({
+                tagId,
+                error: '标签ID不能为空'
+              });
+              continue;
+            }
+            
+            // 更新父子关系
+            const updateResult = await tagModel.updateTag(userId, tagId, { parent_id: parentId });
+            
+            if (updateResult.success) {
+              results.hierarchyUpdated = true;
+            } else {
+              results.errors.push({
+                tagId,
+                error: '更新父子关系失败'
+              });
+            }
+          }
+        } catch (error) {
+          results.errors.push({
+            error: '处理标签层次结构失败: ' + error.message
+          });
+        }
+      }
+
+      // 获取更新后的完整标签列表（按sort_order排序）
       const finalTags = await tagModel.getAllTags(userId);
 
       res.json({
         success: true,
         message: '标签顺序更新完成',
         results: results,
-        tags: finalTags
+        tags: finalTags,
+        hierarchyUpdated: results.hierarchyUpdated
       });
     } catch (error) {
-      // 静默处理标签顺序更新错误
+      console.error('标签顺序更新失败:', error);
       res.status(500).json({ error: '标签顺序更新失败' });
     }
   });
