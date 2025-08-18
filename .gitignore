@@ -54,3 +54,14 @@ $RECYCLE.BIN/
 .cache/
 .temp/
 .tmp/
+
+# 数据库文件
+*.sqlite
+*.db
+*.sqlite3
+*.sqlite-journal
+*.db-journal
+server/database.sqlite
+server/backup_database.sqlite
+server/database.db
+server/memeos.db
