@@ -1,9 +1,11 @@
-# MemeOS - 笔记管理系统
-
+# MemeOS（灰灰笔记） - 简单笔记，简单生活（本地应用）
+# 强烈本地使用（本地存储），切勿暴露在公网！！！！！！！！！
 ## 项目简介
 
 MemeOS 是一个现代化的笔记管理应用，支持双向链接、标签管理、卡片式视图等功能。采用前后端分离架构，前端使用 React + Vite，后端使用 Node.js + Express + SQLite。
 
+## 项目演示视频
+[![项目演示视频](https://i2.hdslb.com/bfs/archive/03e09589b48d16344ee736cfa3ef9026f97c4e1f.jpg)](https://www.bilibili.com/video/BV1NQYvz3EMP)
 ## 主要功能
 <img width="2560" height="1440" alt="预览" src="https://github.com/user-attachments/assets/31f6072f-cfbb-43d9-b545-f338ff54f73b" />
 <img width="688" height="1288" alt="笔记卡片个性化" src="https://github.com/user-attachments/assets/6345b324-4bde-4ee6-9e38-6d6fd3579ad0" />
@@ -16,7 +18,7 @@ MemeOS 是一个现代化的笔记管理应用，支持双向链接、标签管�
 - 🎨 **卡片视图** - 多种卡片样式和配色方案
 - 📱 **响应式设计** - 支持桌面和移动设备
 - 💾 **数据备份** - 自动备份和数据恢复功能
-- 🔄 **实时同步** - WebSocket 实现实时数据同步
+- 🔄 **前后端通信** - WebSocket 实现实时数据同步
 
 ## 技术栈
 
@@ -39,7 +41,6 @@ MemeOS 是一个现代化的笔记管理应用，支持双向链接、标签管�
 ### 环境要求
 
 - Node.js 16+
-
 ## Node.js 安装指南
 
 ### Windows 系统
@@ -238,12 +239,210 @@ npm run install:all
 npm run start:all
 ```
 
+## Node.js 安装指南
+
+### Windows 系统
+
+#### 方法1：官方安装包（推荐）
+1. 访问 [Node.js 官网](https://nodejs.org/)
+2. 下载 LTS（长期支持）版本
+3. 运行安装程序，按提示完成安装
+4. 安装完成后，打开命令提示符或 PowerShell 验证安装：
+   ```bash
+   node --version
+   npm --version
+   ```
+
+#### 方法2：包管理器安装
+
+**使用 Chocolatey：**
+```bash
+# 安装 Chocolatey（如果未安装）
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# 安装 Node.js
+choco install nodejs-lts
+```
+
+**使用 Winget：**
+```bash
+# 安装 Node.js LTS
+winget install OpenJS.NodeJS.LTS
+```
+
+### macOS 系统
+
+#### 方法1：官方安装包
+1. 访问 [Node.js 官网](https://nodejs.org/)
+2. 下载 macOS 版本的安装包
+3. 双击 .pkg 文件并按提示安装
+4. 验证安装：
+   ```bash
+   node --version
+   npm --version
+   ```
+
+#### 方法2：包管理器
+
+**使用 Homebrew（推荐）：**
+```bash
+# 安装 Homebrew（如果未安装）
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 安装 Node.js
+brew install node
+```
+
+**使用 NVM（Node Version Manager）：**
+```bash
+# 安装 NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 重新加载终端配置
+source ~/.bashrc  # 或 source ~/.zshrc
+
+# 安装最新的 LTS 版本
+nvm install --lts
+nvm use --lts
+```
+
+### Linux 系统
+
+#### Ubuntu/Debian 系统
+
+**使用 APT 包管理器：**
+```bash
+# 更新包列表
+sudo apt update
+
+# 安装 Node.js 和 npm
+sudo apt install nodejs npm
+
+# 或者使用 NodeSource 仓库获取最新版本
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+#### CentOS/RHEL/Fedora 系统
+
+**使用 DNF/YUM 包管理器：**
+```bash
+# CentOS/RHEL 7
+sudo yum install epel-release
+sudo yum install nodejs npm
+
+# CentOS/RHEL 8+ 或 Fedora
+sudo dnf install nodejs npm
+```
+
+**使用 NVM（推荐）：**
+```bash
+# 安装 NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 重新加载终端配置
+source ~/.bashrc
+
+# 安装最新的 LTS 版本
+nvm install --lts
+nvm use --lts
+```
+
+### 验证安装
+
+无论使用哪种安装方法，都可以通过以下命令验证安装是否成功：
+
+```bash
+# 检查 Node.js 版本
+node --version
+# 应该显示类似 v18.17.0 或更高版本
+
+# 检查 npm 版本
+npm --version
+# 应该显示类似 9.6.7 或更高版本
+
+# 检查安装路径
+which node
+which npm
+```
+
+### 常见问题解决
+
+#### 1. 权限问题
+如果在安装过程中遇到权限问题，可以尝试：
+
+```bash
+# macOS/Linux
+sudo chown -R $(whoami) $(npm config get prefix)/{lib/node_modules,bin,share}
+
+# 或者使用 nvm 安装，避免权限问题
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+```
+
+#### 2. 版本管理
+如果需要管理多个 Node.js 版本，推荐使用 NVM：
+
+```bash
+# 安装 NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 查看可用的 Node.js 版本
+nvm ls-remote
+
+# 安装特定版本
+nvm install 18.17.0
+
+# 切换版本
+nvm use 18.17.0
+
+# 设置默认版本
+nvm alias default 18.17.0
+```
+
+#### 3. 网络问题
+如果下载速度慢或无法访问，可以：
+
+- 使用国内镜像源
+- 配置代理
+- 下载离线安装包
+
+#### 4. 环境变量问题
+如果命令无法识别，可能需要手动配置环境变量：
+
+**Windows：**
+1. 右键"此电脑" → "属性" → "高级系统设置" → "环境变量"
+2. 在"系统变量"中找到 Path 变量
+3. 添加 Node.js 安装路径（如 `C:\Program Files\nodejs\`）
+
+**macOS/Linux：**
+```bash
+# 编辑 bash 配置文件
+echo 'export PATH=$PATH:/usr/local/bin' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### 安装完成后的下一步
+
+安装完 Node.js 后，就可以开始使用 MemeOS 项目了：
+
+```bash
+# 克隆/下载项目
+git clone <repository-url>
+cd memeos或者cd MemeOS-main
+
+# 安装依赖
+npm run install:all(我已经打包，应该可以运行，不可以的化，运行这个)
+
+# 启动应用
+npm run start:all
+```
+
 ### 使用步骤
 
-1. **克隆项目**
+1. **下载/克隆本项目**
    ```bash
    git clone <repository-url>
-   cd memeos
+   cd memeos/cd MemeOS-main
    ```
 
 2. **启动应用**
@@ -352,9 +551,6 @@ npm run lint            # 代码检查
 
 ### Q: 数据库文件被锁定怎么办？
 A: 停止运行中的服务器进程，然后重新操作数据库文件。
-
-### Q: 如何备份数据？
-A: 系统会自动备份数据，也可以手动调用备份 API。
 
 ### Q: 前端无法连接后端怎么办？
 A: 检查后端服务器是否正常运行，确认端口配置正确。
