@@ -114,7 +114,9 @@ function AppContentWithEdit() {
 
   // 处理标签变化
   const handleTagChange = (tag) => {
-    setSelectedTag(tag);
+    // 处理标签对象或标签名称
+    const tagName = typeof tag === 'object' && tag !== null ? tag.name : tag;
+    setSelectedTag(tagName);
   };
 
   // 处理标签筛选（从侧边栏触发）

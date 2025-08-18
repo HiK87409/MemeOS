@@ -13,7 +13,7 @@ import { format, parseISO } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { zhCN } from 'date-fns/locale';
 import { sortByFuturePriority } from '../utils/timeUtils';
-import LocalConfigManager from '../utils/localConfigManager';
+import localConfigManager from '../utils/localConfigManager';
 
 import TagManager from '../components/TagManager';
 import AttachmentManager from '../components/AttachmentManager';
@@ -106,9 +106,12 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
   }, [isSmallScreen, rightSidebarOpen, navigate]);
   
   // 处理标签筛选的函数
-  const handleTagFilter = useCallback((tagName) => {
+  const handleTagFilter = useCallback((tagInput) => {
+    // 处理标签对象或标签名称
+    const tagName = typeof tagInput === 'object' && tagInput !== null ? tagInput.name : tagInput;
+    
     if (onTagChange && typeof onTagChange === 'function') {
-      onTagChange(tagName);
+      onTagChange(tagInput); // 传递完整的标签对象或名称
     }
     
     // 触发标签筛选状态变化事件，让TagManager同步选中状态
@@ -376,6 +379,87 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
     };
   };
   
+  // 获取需要筛选的标签列表（包括父子标签关系）
+  const getTagsToFilter = useCallback((tagInput, allTags) => {
+    if (!tagInput || !allTags) return [];
+    
+    // 处理标签输入，可能是字符串或对象
+    const tagName = typeof tagInput === 'string' ? tagInput : tagInput.name;
+    if (!tagName) return [];
+    
+    console.log('getTagsToFilter输入:', { tagInput, tagName, allTags: allTags.slice(0, 3) }); // 调试日志
+    
+    const tagsToFilter = new Set([tagName]);
+    
+    // 递归函数来收集所有子标签
+    const collectChildren = (tag) => {
+      console.log('collectChildren调用:', { tag }); // 调试日志
+      
+      // 基于parentId查找子标签
+      const childTags = allTags.filter(t => t.parentId === tag.id);
+      console.log('找到子标签:', childTags); // 调试日志
+      
+      childTags.forEach(child => {
+        const childName = typeof child === 'string' ? child : child.name;
+        if (childName && !tagsToFilter.has(childName)) {
+          tagsToFilter.add(childName);
+          console.log('添加子标签到筛选列表:', childName); // 调试日志
+          
+          // 递归处理子标签的子标签
+          collectChildren(child);
+        }
+      });
+    };
+    
+    // 查找目标标签
+    const targetTag = allTags.find(tag => {
+      if (typeof tag === 'string') {
+        return tag === tagName;
+      }
+      return tag.name === tagName;
+    });
+    
+    if (targetTag) {
+      // 收集所有子标签（包括嵌套的子标签）
+      collectChildren(targetTag);
+      
+      // 查找所有父标签
+      const findParents = (currentTagName, visited = new Set()) => {
+        if (visited.has(currentTagName)) return;
+        visited.add(currentTagName);
+        
+        // 找到当前标签对象
+        const currentTag = allTags.find(tag => {
+          if (typeof tag === 'string') {
+            return tag === currentTagName;
+          }
+          return tag.name === currentTagName;
+        });
+        
+        if (currentTag && currentTag.parentId) {
+          // 基于parentId查找父标签
+          const parentTag = allTags.find(tag => tag.id === currentTag.parentId);
+          if (parentTag) {
+            const parentName = typeof parentTag === 'string' ? parentTag : parentTag.name;
+            if (parentName && !tagsToFilter.has(parentName)) {
+              tagsToFilter.add(parentName);
+              console.log('添加父标签到筛选列表:', parentName); // 调试日志
+              // 递归查找父标签的父标签
+              findParents(parentName, visited);
+            }
+          }
+        }
+      };
+      
+      // 查找所有父标签（包括多级父标签）
+      findParents(tagName);
+    }
+    
+    const result = Array.from(tagsToFilter);
+    console.log('getTagsToFilter最终结果:', result); // 调试日志
+    return result;
+  }, []);
+  
   // 加载笔记
   const loadNotes = useCallback(async (query = '') => {
     try {
@@ -436,25 +520,24 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
       // 如果有标签筛选，进行筛选
       if (selectedTag) {
         try {
+          // 获取需要筛选的所有标签（包括父子标签关系）
+          const tagsToFilter = getTagsToFilter(selectedTag, availableTags);
+          console.log('标签筛选:', { selectedTag, tagsToFilter });
+          
           data = data.filter(note => {
             if (!note.tags) return false;
             
             // 处理字符串格式的标签
             if (typeof note.tags === 'string') {
               const noteTags = note.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
-              return noteTags.includes(selectedTag);
+              return noteTags.some(tag => tagsToFilter.includes(tag));
             }
             
             // 处理数组格式的标签
             if (Array.isArray(note.tags)) {
               return note.tags.some(tag => {
-                if (typeof tag === 'string') {
-                  return tag === selectedTag;
-                }
-                if (typeof tag === 'object' && tag.name) {
-                  return tag.name === selectedTag;
-                }
-                return false;
+                const tagName = typeof tag === 'string' ? tag : (tag.name || tag);
+                return tagsToFilter.includes(tagName);
               });
             }
             
@@ -486,12 +569,13 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
     } finally {
       setLoading(false);
     }
-  }, [dateFilter, selectedTag]);
+  }, [dateFilter, selectedTag, availableTags, getTagsToFilter]);
 
   // 加载可用标签
   const loadAvailableTags = async () => {
     try {
-      const tags = await fetchAllTags();
+      // 使用localConfigManager获取包含父子标签关系的完整标签数据
+      const tags = localConfigManager.getTags();
       setAvailableTags(tags);
       if (updateTags && typeof updateTags === 'function') {
         updateTags(tags); // 同时更新全局标签
@@ -654,7 +738,8 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
   // 刷新标签数据
   const refreshTags = async () => {
     try {
-      const tags = await fetchAllTags();
+      // 使用localConfigManager获取包含父子标签关系的完整标签数据
+      const tags = localConfigManager.getTags();
       setAvailableTags(tags);
       if (updateTags && typeof updateTags === 'function') {
         updateTags(tags); // 同时更新全局标签

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { FiCheck, FiX, FiChevronDown, FiPlus, FiMoreVertical, FiEdit2, FiStar, FiFolder, FiFolderPlus, FiTrash2, FiCornerUpLeft, FiCornerUpRight, FiList, FiBookmark } from 'react-icons/fi';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { FiCheck, FiX, FiChevronDown, FiPlus, FiMoreVertical, FiEdit2, FiStar, FiFolder, FiFolderPlus, FiFolderMinus, FiTrash2, FiCornerUpLeft, FiCornerUpRight, FiList, FiBookmark } from 'react-icons/fi';
 import { fetchAllTags, createTag, deleteTag as deleteTagApi, removeTagFromNotes, deleteTagAndNotes, renameTag } from '../api/notesApi';
 import { getAllColors, getTagColorClass, getTagStyle, saveTagColor } from '../utils/tagColorUtils';
 import { commonColors, getDefaultColor } from '../utils/commonColors';
@@ -7,6 +7,122 @@ import CompactCalendarFilter from './CompactCalendarFilter';
 import PortalPopup from './PortalPopup';
 import localConfigManager from '../utils/localConfigManager';
 import ConfirmModal from './ConfirmModal';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+// 添加自定义CSS样式
+const customStyles = `
+  .sortable-ghost {
+    opacity: 0.4;
+    background: rgba(59, 130, 246, 0.1);
+    border: 2px dashed #3B82F6;
+  }
+  
+  .sortable-chosen {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+  }
+  
+  .sortable-drag {
+    transform: rotate(2deg);
+    opacity: 0.8;
+  }
+  
+  .drag-handle {
+    cursor: grab;
+    transition: all 0.2s ease;
+  }
+  
+  .drag-handle:hover {
+    color: #3B82F6;
+    transform: scale(1.1);
+  }
+  
+  .drag-handle:active {
+    cursor: grabbing;
+    transform: scale(0.95);
+  }
+  
+  .tag-expand-btn {
+    transition: transform 0.2s ease;
+  }
+  
+  .tag-expand-btn.expanded {
+    transform: rotate(180deg);
+  }
+  
+  .tag-item {
+    transition: all 0.2s ease;
+    position: relative;
+  }
+  
+  .tag-item:hover {
+    transform: translateX(2px);
+  }
+  
+  .tag-item.dragging {
+    z-index: 1000;
+    pointer-events: none;
+  }
+  
+  .tag-level-1 { padding-left: 28px !important; }
+  .tag-level-2 { padding-left: 48px !important; }
+  .tag-level-3 { padding-left: 68px !important; }
+  .tag-level-4 { padding-left: 88px !important; }
+  
+  .loading-more {
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+  
+  .scroll-container {
+    scroll-behavior: smooth;
+  }
+  
+  .scroll-container::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scroll-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+  }
+  
+  .scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+  }
+  
+  .scroll-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.5);
+  }
+`;
+
+// 动态添加样式到head
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = customStyles;
+  document.head.appendChild(styleElement);
+}
 
 const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, className = '' }) => {
   // 基础状态
@@ -18,6 +134,18 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [tagToDelete, setTagToDelete] = useState(null);
   const scrollContainerRef = useRef(null);
+  
+  // 标签树相关状态
+  const [expandedTags, setExpandedTags] = useState(new Set());
+  const [tagHierarchy, setTagHierarchy] = useState({});
+  const [visibleTags, setVisibleTags] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  
+  // Intersection Observer相关
+  const observerRef = useRef(null);
+  const lastTagRef = useRef(null);
   
 
   
@@ -62,6 +190,45 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       confirmModalData.onConfirm();
     }
     closeConfirmModal();
+  };
+
+  // 父标签选择对话框状态
+  const [showParentSelectionModal, setShowParentSelectionModal] = useState(false);
+  const [parentSelectionData, setParentSelectionData] = useState({
+    title: '',
+    message: '',
+    options: [],
+    onSelect: null
+  });
+
+  // 显示父标签选择对话框
+  const showParentSelectionDialog = (title, message, options, onSelect) => {
+    setParentSelectionData({
+      title,
+      message,
+      options,
+      onSelect
+    });
+    setShowParentSelectionModal(true);
+  };
+
+  // 关闭父标签选择对话框
+  const closeParentSelectionModal = () => {
+    setShowParentSelectionModal(false);
+    setParentSelectionData({
+      title: '',
+      message: '',
+      options: [],
+      onSelect: null
+    });
+  };
+
+  // 处理父标签选择
+  const handleParentSelect = (selectedParent) => {
+    if (parentSelectionData.onSelect) {
+      parentSelectionData.onSelect(selectedParent);
+    }
+    closeParentSelectionModal();
   };
 
   // 统一的标签参数结构
@@ -676,6 +843,17 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           const newPinnedStatus = !tag.isPinned;
           await localConfigManager.updateTag(tag.id, { isPinned: newPinnedStatus });
           
+          // 如果是父标签，同步置顶状态到所有子标签
+          if (tag.isParent) {
+            const allTags = localConfigManager.getTags();
+            const childTags = allTags.filter(t => t.parentId === tag.id);
+            
+            for (const child of childTags) {
+              await localConfigManager.updateTag(child.id, { isPinned: newPinnedStatus });
+              console.log('子标签置顶状态已同步:', child.name, '->', newPinnedStatus ? '已置顶' : '未置顶');
+            }
+          }
+          
           // 强制重新加载标签数据以确保状态同步
           await localConfigManager.loadFromDatabase();
           const updatedTags = localConfigManager.getTags();
@@ -694,6 +872,18 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
         try {
           const unifiedTag = getUnifiedTagParams(tag);
           const newFavoriteStatus = await unifiedTag.toggleFavorite();
+          
+          // 如果是父标签，同步收藏状态到所有子标签
+          if (tag.isParent) {
+            const allTags = localConfigManager.getTags();
+            const childTags = allTags.filter(t => t.parentId === tag.id);
+            
+            for (const child of childTags) {
+              const childUnifiedTag = getUnifiedTagParams(child);
+              await childUnifiedTag.setFavorite(newFavoriteStatus);
+              console.log('子标签收藏状态已同步:', child.name, '->', newFavoriteStatus ? '已收藏' : '已取消收藏');
+            }
+          }
           
           // 不再需要手动重新加载数据，因为事件处理函数会处理状态更新
           // 这样可以避免闪烁问题
@@ -724,38 +914,40 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       case 'remove':
         // 移除标签并删除标签功能 - 从所有笔记中移除标签并删除标签本身
         try {
-          // 移除标签并删除标签功能 - 从所有笔记中移除标签并删除标签本身
-        const result = await removeTagFromNotes(tag.name);
-        if (result.success) {
-          console.log('已从所有笔记中移除标签并删除标签本身:', tag.name);
-          window.showToast(result.message || '已从所有笔记中移除标签并删除标签本身', 'success');
-          
-          // 从本地配置管理器中删除标签
-          try {
-            await localConfigManager.deleteTag(tag.id);
-            console.log('本地配置管理器中的标签已删除:', tag.name);
-          } catch (localError) {
-            console.warn('从本地配置管理器删除标签失败:', localError);
-          }
-          } else {
-            // 普通标签只移除自己
-            const result = await removeTagFromNotes(tag.name);
-            if (result.success) {
-              console.log('已从所有笔记中移除标签并删除标签本身:', tag.name);
-              window.showToast(result.message || '已从所有笔记中移除标签并删除标签本身', 'success');
-              
-              // 从本地配置管理器中删除标签
-              try {
-                await localConfigManager.deleteTag(tag.id);
-                console.log('本地配置管理器中的标签已删除:', tag.name);
-              } catch (localError) {
-                console.warn('从本地配置管理器删除标签失败:', localError);
+          // 如果是父标签，先处理所有子标签
+          if (tag.isParent) {
+            const allTags = localConfigManager.getTags();
+            const childTags = allTags.filter(t => t.parentId === tag.id);
+            
+            // 递归移除所有子标签
+            for (const child of childTags) {
+              const childResult = await removeTagFromNotes(child.name);
+              if (childResult.success) {
+                await localConfigManager.deleteTag(child.id);
+                console.log('已从所有笔记中移除子标签并删除子标签本身:', child.name);
+              } else {
+                console.error('移除子标签失败:', child.name, childResult.message);
               }
-            } else {
-              console.error('移除标签失败:', result.message);
-              window.showToast('移除标签失败，请重试', 'error');
-              return;
             }
+          }
+          
+          // 移除当前标签
+          const result = await removeTagFromNotes(tag.name);
+          if (result.success) {
+            console.log('已从所有笔记中移除标签并删除标签本身:', tag.name);
+            window.showToast(result.message || '已从所有笔记中移除标签并删除标签本身', 'success');
+            
+            // 从本地配置管理器中删除标签
+            try {
+              await localConfigManager.deleteTag(tag.id);
+              console.log('本地配置管理器中的标签已删除:', tag.name);
+            } catch (localError) {
+              console.warn('从本地配置管理器删除标签失败:', localError);
+            }
+          } else {
+            console.error('移除标签失败:', result.message);
+            window.showToast('移除标签失败，请重试', 'error');
+            return;
           }
           
           // 触发笔记列表刷新
@@ -781,6 +973,143 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
         }
         break;
         
+      case 'dissolveParent':
+        // 解散父标签功能
+        try {
+          console.log('开始解散父标签:', tag.name);
+          
+          // 获取所有子标签
+          const allTags = localConfigManager.getTags();
+          const childTags = allTags.filter(t => t.parentId === tag.id);
+          
+          // 更新所有子标签的parentId为null
+          for (const child of childTags) {
+            await localConfigManager.updateTag(child.id, { parentId: null });
+            console.log('子标签已移出父标签:', child.name);
+          }
+          
+          // 更新父标签的isParent状态为false
+          await localConfigManager.updateTag(tag.id, { isParent: false });
+          
+          // 直接获取更新后的标签数据，不重新从数据库加载
+          const updatedTags = localConfigManager.getTags();
+          setAllTags(updatedTags);
+          
+          window.showToast(`父标签 "${tag.name}" 已解散，${childTags.length} 个子标签已回到主列表`, 'success');
+          console.log('父标签解散完成:', tag.name);
+        } catch (error) {
+          console.error('解散父标签失败:', error);
+          window.showToast('解散父标签失败，请重试', 'error');
+        }
+        break;
+        
+      case 'setAsParent':
+        // 设置为父标签功能
+        try {
+          console.log('开始设置标签为父标签:', tag.name);
+          
+          // 更新标签的isParent状态为true
+          await localConfigManager.updateTag(tag.id, { isParent: true });
+          
+          // 直接获取更新后的标签数据，不重新从数据库加载
+          const updatedTags = localConfigManager.getTags();
+          setAllTags(updatedTags);
+          
+          window.showToast(`标签 "${tag.name}" 已设置为父标签`, 'success');
+          console.log('标签已设置为父标签:', tag.name);
+        } catch (error) {
+          console.error('设置标签为父标签失败:', error);
+          window.showToast('设置标签为父标签失败，请重试', 'error');
+        }
+        break;
+        
+      case 'moveToParent':
+        // 移动到父标签功能
+        try {
+          console.log('开始移动标签到父标签:', tag.name);
+          
+          // 获取所有可以作为父标签的标签（没有parentId的标签，且不是当前标签）
+          const allTags = localConfigManager.getTags();
+          const parentCandidates = allTags.filter(t => !t.parentId && t.id !== tag.id);
+          
+          if (parentCandidates.length === 0) {
+            window.showToast('没有可用的父标签', 'warning');
+            return;
+          }
+          
+          // 创建父标签选择对话框
+          const parentOptions = parentCandidates.map(p => ({
+            id: p.id,
+            name: p.name,
+            color: tagColorMap[p.name] || '#9CA3AF'
+          }));
+          
+          // 显示选择对话框
+          showParentSelectionDialog(
+            '选择父标签',
+            `请选择要将标签 "${tag.name}" 移动到的父标签：`,
+            parentOptions,
+            async (selectedParent) => {
+              try {
+                // 更新标签的parentId
+                await localConfigManager.updateTag(tag.id, { parentId: selectedParent.id });
+                
+                // 更新父标签的isParent状态为true
+                await localConfigManager.updateTag(selectedParent.id, { isParent: true });
+                
+                // 直接获取更新后的标签数据，不重新从数据库加载
+                const updatedTags = localConfigManager.getTags();
+                setAllTags(updatedTags);
+                
+                window.showToast(`标签 "${tag.name}" 已移动到父标签 "${selectedParent.name}"`, 'success');
+                console.log('标签移动到父标签完成:', tag.name, '->', selectedParent.name);
+              } catch (error) {
+                console.error('移动标签到父标签失败:', error);
+                window.showToast('移动标签到父标签失败，请重试', 'error');
+              }
+            }
+          );
+        } catch (error) {
+          console.error('移动标签到父标签失败:', error);
+          window.showToast('移动标签到父标签失败，请重试', 'error');
+        }
+        break;
+        
+      case 'removeFromParent':
+        // 从父标签中移出功能
+        try {
+          console.log('开始从父标签中移出标签:', tag.name);
+          
+          if (!tag.parentId) {
+            window.showToast('该标签不在任何父标签中', 'warning');
+            return;
+          }
+          
+          // 更新标签的parentId为null
+          await localConfigManager.updateTag(tag.id, { parentId: null });
+          
+          // 检查原父标签是否还有其他子标签
+          const allTags = localConfigManager.getTags();
+          const oldParentId = tag.parentId;
+          const siblings = allTags.filter(t => t.parentId === oldParentId && t.id !== tag.id);
+          
+          if (siblings.length === 0) {
+            await localConfigManager.updateTag(oldParentId, { isParent: false });
+            console.log('原父标签已取消父标签状态:', oldParentId);
+          }
+          
+          // 直接获取更新后的标签数据，不重新从数据库加载
+          const updatedTags = localConfigManager.getTags();
+          setAllTags(updatedTags);
+          
+          window.showToast(`标签 "${tag.name}" 已从父标签中移出`, 'success');
+          console.log('标签已从父标签中移出:', tag.name);
+        } catch (error) {
+          console.error('从父标签中移出标签失败:', error);
+          window.showToast('从父标签中移出标签失败，请重试', 'error');
+        }
+        break;
+        
       case 'deleteAll':
         // 删除标签和笔记功能
         const confirmMessage = `确定要删除标签 "${tag.name}" 及其所有相关笔记吗？此操作不可恢复。`;
@@ -790,6 +1119,21 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           confirmMessage,
           async () => {
             try {
+              // 如果是父标签，先处理子标签
+              if (tag.isParent) {
+                const allTags = localConfigManager.getTags();
+                const childTags = allTags.filter(t => t.parentId === tag.id);
+                
+                // 递归删除所有子标签和相关笔记
+                for (const child of childTags) {
+                  const childResult = await deleteTagAndNotes(child.name);
+                  if (childResult.success) {
+                    await localConfigManager.deleteTag(child.id);
+                    console.log('已删除子标签和相关笔记:', child.name);
+                  }
+                }
+              }
+              
               // 删除标签和相关笔记
               const result = await deleteTagAndNotes(tag.name);
               if (result.success) {
@@ -804,24 +1148,9 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
                   console.warn('从本地配置管理器删除标签失败:', localError);
                 }
               } else {
-                // 普通标签只删除自己
-                const result = await deleteTagAndNotes(tag.name);
-                if (result.success) {
-                  console.log('已删除标签和相关笔记:', tag.name);
-                  window.showToast(result.message || '标签及其相关笔记已删除', 'success');
-                  
-                  // 从本地配置管理器中删除标签
-                  try {
-                    await localConfigManager.deleteTag(tag.id);
-                    console.log('本地配置管理器中的标签已删除:', tag.name);
-                  } catch (localError) {
-                    console.warn('从本地配置管理器删除标签失败:', localError);
-                  }
-                } else {
-                  console.error('删除标签和笔记失败:', result.message);
-                  window.showToast('删除标签和笔记失败，请重试', 'error');
-                  return;
-                }
+                console.error('删除标签和笔记失败:', result.message);
+                window.showToast('删除标签和笔记失败，请重试', 'error');
+                return;
               }
               
               // 从收藏列表中移除已删除的标签
@@ -1004,10 +1333,59 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
     if (!searchTerm.trim()) return tags;
     
     const term = searchTerm.toLowerCase();
-    return tags.filter(tag => {
-      // 检查当前标签是否匹配
-      return tag.name && tag.name.toLowerCase().includes(term);
+    const filteredTagIds = new Set();
+    
+    // 首先找到所有匹配的标签
+    tags.forEach(tag => {
+      if (tag.name && tag.name.toLowerCase().includes(term)) {
+        filteredTagIds.add(tag.id);
+        
+        // 如果是父标签，包含所有子标签
+        if (tag.isParent) {
+          const childTags = tags.filter(t => t.parentId === tag.id);
+          childTags.forEach(child => filteredTagIds.add(child.id));
+        }
+        
+        // 如果是子标签，也包含其父标签
+        if (tag.parentId) {
+          const parentTag = tags.find(t => t.id === tag.parentId);
+          if (parentTag) {
+            filteredTagIds.add(parentTag.id);
+          }
+        }
+      }
     });
+    
+    // 额外检查：确保所有匹配的子标签都被正确处理
+    tags.forEach(tag => {
+      // 如果这个标签是子标签且名称匹配搜索词
+      if (tag.parentId && tag.name && tag.name.toLowerCase().includes(term)) {
+        // 确保子标签被包含
+        filteredTagIds.add(tag.id);
+        
+        // 确保父标签被包含
+        const parentTag = tags.find(t => t.id === tag.parentId);
+        if (parentTag) {
+          filteredTagIds.add(parentTag.id);
+        }
+      }
+    });
+    
+    // 额外检查：如果搜索词匹配父标签名称，确保只显示该父标签和其直接子标签
+    tags.forEach(tag => {
+      // 如果这个标签是父标签且名称匹配搜索词
+      if (tag.isParent && tag.name && tag.name.toLowerCase().includes(term)) {
+        // 确保父标签被包含
+        filteredTagIds.add(tag.id);
+        
+        // 只包含直接子标签
+        const directChildren = tags.filter(t => t.parentId === tag.id);
+        directChildren.forEach(child => filteredTagIds.add(child.id));
+      }
+    });
+    
+    // 返回所有匹配的标签及其相关标签
+    return tags.filter(tag => filteredTagIds.has(tag.id));
   };
   
   const handleTagClick = (tag) => {
@@ -1026,9 +1404,9 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
       setSelectedTag(tag);
       console.log('选中标签:', tag.name);
       
-      // 触发标签筛选功能
+      // 触发标签筛选功能，传递完整的标签对象
       if (window.handleTagFilter) {
-        window.handleTagFilter(tag.name);
+        window.handleTagFilter(tag);
       }
     }
   };
@@ -1096,32 +1474,254 @@ useEffect(() => {
 
 
 
-  // 渲染标签列表
-  const renderTagTree = (tags) => {
-    // 按置顶状态排序：置顶标签在前，非置顶标签在后
-    const sortedTags = [...tags].sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1; // a置顶，b不置顶，a在前
-      if (!a.isPinned && b.isPinned) return 1;  // a不置顶，b置顶，b在前
-      return 0; // 都置顶或都不置顶，保持原顺序
+  // 构建标签层次结构
+  const buildTagHierarchy = useCallback((tags) => {
+    const hierarchy = {};
+    const rootTags = [];
+    
+    // 首先创建所有标签的映射
+    tags.forEach(tag => {
+      hierarchy[tag.id] = {
+        ...tag,
+        children: [],
+        level: 0,
+        isParent: false
+      };
     });
     
-    return sortedTags.map((tag) => (
-      <div key={tag.id} className="w-full">
+    // 构建层次关系
+    tags.forEach(tag => {
+      if (tag.parentId && hierarchy[tag.parentId]) {
+        hierarchy[tag.parentId].children.push(hierarchy[tag.id]);
+        hierarchy[tag.parentId].isParent = true;
+        hierarchy[tag.id].level = hierarchy[tag.parentId].level + 1;
+      } else {
+        rootTags.push(hierarchy[tag.id]);
+      }
+    });
+    
+    return { hierarchy, rootTags };
+  }, []);
+  
+  // 扁平化标签树用于显示
+  const flattenTagTree = useCallback((tags, level = 0, parentExpanded = true, addedIds = new Set()) => {
+    let result = [];
+    
+    // 对标签进行排序：置顶的标签在前，然后按其他规则排序
+    const sortedTags = [...tags].sort((a, b) => {
+      // 置顶标签优先
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      // 如果置顶状态相同，保持原有顺序
+      return 0;
+    });
+    
+    sortedTags.forEach(tag => {
+      if (level === 0 || parentExpanded) {
+        // 使用Set来避免重复添加标签
+        if (!addedIds.has(tag.id)) {
+          addedIds.add(tag.id);
+          result.push({ ...tag, level });
+          
+          if (expandedTags.has(tag.id) && tag.children && tag.children.length > 0) {
+            const childTags = flattenTagTree(tag.children, level + 1, true, addedIds);
+            result.push(...childTags);
+          }
+        }
+      }
+    });
+    
+    return result;
+  }, [expandedTags]);
+  
+  // 切换标签展开/折叠状态
+  const toggleTagExpand = useCallback((tagId) => {
+    setExpandedTags(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tagId)) {
+        newSet.delete(tagId);
+      } else {
+        newSet.add(tagId);
+      }
+      return newSet;
+    });
+  }, []);
+  
+  // 处理拖拽排序
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+  
+  const handleDragEnd = useCallback(async (event) => {
+    const { active, over } = event;
+    
+    if (active.id !== over.id) {
+      const activeTag = allTags.find(tag => tag.id === active.id);
+      const overTag = allTags.find(tag => tag.id === over.id);
+      
+      if (!activeTag || !overTag) return;
+      
+      try {
+        // 只允许同级标签之间的排序（都有父标签或都没有父标签）
+        // 不允许通过拖拽建立或解除父子关系
+        if ((activeTag.parentId === null && overTag.parentId === null) || 
+            (activeTag.parentId === overTag.parentId)) {
+          const oldIndex = visibleTags.findIndex(tag => tag.id === active.id);
+          const newIndex = visibleTags.findIndex(tag => tag.id === over.id);
+          
+          const newVisibleTags = arrayMove(visibleTags, oldIndex, newIndex);
+          setVisibleTags(newVisibleTags);
+          
+          // 更新标签顺序到本地存储
+          const tagOrder = newVisibleTags.map(tag => tag.id);
+          localStorage.setItem('tagOrder', JSON.stringify(tagOrder));
+          console.log('标签顺序已更新:', tagOrder);
+        } else {
+          // 如果尝试跨层级拖拽，提示用户使用菜单操作
+          window.showToast('请使用菜单操作来建立父子标签关系', 'warning');
+        }
+        
+      } catch (error) {
+        console.error('拖拽操作失败:', error);
+        window.showToast('拖拽操作失败，请重试', 'error');
+      }
+    }
+  }, [visibleTags, allTags]);
+  
+  // Intersection Observer回调
+  const handleObserver = useCallback((entries) => {
+    const [entry] = entries;
+    if (entry.isIntersecting && hasMore && !isLoading) {
+      setPage(prevPage => prevPage + 1);
+    }
+  }, [hasMore, isLoading]);
+  
+  // 设置Intersection Observer
+  useEffect(() => {
+    const options = {
+      root: scrollContainerRef.current,
+      rootMargin: '0px',
+      threshold: 0.1
+    };
+    
+    observerRef.current = new IntersectionObserver(handleObserver, options);
+    
+    if (lastTagRef.current) {
+      observerRef.current.observe(lastTagRef.current);
+    }
+    
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [handleObserver]);
+  
+  // 更新可见标签
+  useEffect(() => {
+    const { hierarchy, rootTags } = buildTagHierarchy(allTags);
+    setTagHierarchy(hierarchy);
+    
+    const flattenedTags = flattenTagTree(rootTags);
+    
+    // 应用搜索过滤
+    const filteredTags = filterTags(flattenedTags, searchTerm);
+    
+    // 分页加载
+    const startIndex = 0;
+    const endIndex = page * pageSize;
+    const paginatedTags = filteredTags.slice(startIndex, endIndex);
+    
+    setVisibleTags(paginatedTags);
+    setHasMore(endIndex < filteredTags.length);
+  }, [allTags, page, buildTagHierarchy, flattenTagTree, searchTerm]);
+  
+  // 更新lastTagRef
+  useEffect(() => {
+    if (visibleTags.length > 0) {
+      lastTagRef.current = document.querySelector(`[data-tag-id="${visibleTags[visibleTags.length - 1].id}"]`);
+    }
+  }, [visibleTags]);
+  
+  // 可排序的标签项组件
+  const SortableTagItem = ({ tag }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+    } = useSortable({ id: tag.id });
+    
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+    };
+    
+    const hasChildren = tag.children && tag.children.length > 0;
+    const isExpanded = expandedTags.has(tag.id);
+    const isParent = tag.isParent || hasChildren;
+    
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        data-tag-id={tag.id}
+        className="w-full"
+      >
         {/* 标签项 */}
         <div 
-          className={`tag-item flex items-center w-full p-2 mb-1 rounded-lg cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 ${
+          className={`tag-item flex items-center w-full p-2 mb-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 ${
             tag.isPinned ? 'border-l-4 border-blue-500' : ''
-          }`}
-          style={{ paddingLeft: '8px' }}
+          } ${selectedTag && selectedTag.id === tag.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+          style={{ 
+            paddingLeft: `${8 + tag.level * 20}px`,
+            opacity: transform ? 0.8 : 1
+          }}
           onClick={() => handleTagClick(tag)}
         >
+          {/* 拖拽手柄 */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="mr-2 p-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+            </svg>
+          </div>
+          
+          {/* 展开/折叠按钮 */}
+          {hasChildren && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleTagExpand(tag.id);
+              }}
+              className="mr-2 p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+            >
+              <FiChevronDown 
+                className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+                size={12} 
+              />
+            </button>
+          )}
+          
+          {/* 父标签特殊图标 */}
+          {isParent && (
+            <FiFolder className="mr-1 text-blue-500" size={12} title="父标签" />
+          )}
+          
           {/* 标签颜色圆点 */}
           <div className="mr-2 w-3 h-3 rounded-full border border-gray-300 dark:border-gray-600" 
                style={{ backgroundColor: tagColorMap[tag.name] || '#9CA3AF' }}
                title={`标签颜色: ${tagColorMap[tag.name] || '默认'}`}>
           </div>
           
-          {/* 标签名称 - 字体变小 */}
+          {/* 标签名称 */}
           <span className="flex-1 text-xs text-gray-800 dark:text-gray-200 truncate">
             #{tag.name}
           </span>
@@ -1140,8 +1740,6 @@ useEffect(() => {
           {tag.isFavorite && (
             <FiStar className="mr-2 text-purple-500" size={12} />
           )}
-          
-
           
           {/* 菜单按钮 */}
           <button
@@ -1177,6 +1775,7 @@ useEffect(() => {
             >
               <FiX className="text-red-500 hover:text-red-700" size={14} />
             </button>
+            
             {/* 标签置顶 */}
             <button
               onClick={() => handleMenuAction('pin', tag)}
@@ -1207,10 +1806,100 @@ useEffect(() => {
               {tag.isFavorite ? '取消收藏' : '收藏标签'}
             </button>
             
-            <div className="border-0 my-1"></div>
+            {/* 父标签特殊功能 */}
+            {tag.parentId ? (
+              <>
+                <div className="border-0 my-1"></div>
+                {/* 移出父标签 */}
+                <button
+                  onClick={() => handleMenuAction('removeFromParent', tag)}
+                  className="w-full text-left px-3 py-2 text-sm flex items-center border-0 transition-colors"
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: '#f59e0b'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = 'var(--theme-surface)';
+                    e.target.style.color = '#d97706';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = '#f59e0b';
+                  }}
+                  title="从父标签中移出"
+                >
+                  <FiCornerUpLeft className="mr-2" size={14} />
+                  <span>移出父标签</span>
+                </button>
+              </>
+            ) : isParent ? (
+              <>
+                <div className="border-0 my-1"></div>
+                {/* 解散父标签 */}
+                <button
+                  onClick={() => handleMenuAction('dissolveParent', tag)}
+                  className="w-full text-left px-3 py-2 text-sm flex items-center border-0 transition-colors"
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: '#ef4444'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = 'var(--theme-surface)';
+                    e.target.style.color = '#dc2626';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = '#ef4444';
+                  }}
+                  title="解散父标签关系"
+                >
+                  <FiFolderMinus className="mr-2" size={14} />
+                  <span>解散父标签</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="border-0 my-1"></div>
+                {/* 设置为父标签 */}
+                <button
+                  onClick={() => handleMenuAction('setAsParent', tag)}
+                  className="w-full text-left px-3 py-2 text-sm flex items-center border-0 transition-colors"
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: '#3b82f6'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = 'var(--theme-surface)';
+                    e.target.style.color = '#2563eb';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                    e.target.style.color = '#3b82f6';
+                  }}
+                  title="设置为父标签"
+                >
+                  <FiFolderPlus className="mr-2" size={14} />
+                  <span>设置为父标签</span>
+                </button>
+                {/* 移到父标签 */}
+                <button
+                  onClick={() => handleMenuAction('moveToParent', tag)}
+                  className="w-full text-left px-3 py-2 text-sm flex items-center border-0 transition-colors"
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: 'var(--theme-text)'
+                  }}
+                  onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--theme-surface)'}
+                  onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                  title="移动到父标签"
+                >
+                  <FiCornerUpRight className="mr-2" size={14} />
+                  <span>移到父标签</span>
+                </button>
+              </>
+            )}
             
-
-
+            <div className="border-0 my-1"></div>
             
             {/* 设置颜色 */}
             <button
@@ -1230,8 +1919,6 @@ useEffect(() => {
               }} />
               设置颜色
             </button>
-            
-
             
             <div className="border-0 my-1"></div>
             
@@ -1274,6 +1961,13 @@ useEffect(() => {
           </div>
         )}
       </div>
+    );
+  };
+  
+  // 渲染标签树
+  const renderTagTree = () => {
+    return visibleTags.map((tag) => (
+      <SortableTagItem key={tag.id} tag={tag} />
     ));
   };
   
@@ -1670,21 +2364,35 @@ useEffect(() => {
             </div>
           </div>
         )}
-        <div className="h-full overflow-y-auto hide-scrollbar smooth-scroll-container scrollbar-smooth scrollbar-hide">
-          {isLoading ? (
-            <div className="text-sm text-theme-text-muted py-4 text-center">加载中...</div>
-          ) : (() => {
-            const filteredTags = filterTags(allTags, searchTerm);
-            return filteredTags.length > 0 ? (
-              <div className="space-y-1">
-                {renderTagTree(filteredTags)}
-              </div>
-            ) : (
-              <div className="text-sm text-theme-text-muted py-4 text-center">
-                {searchTerm ? '没有找到匹配的标签' : '暂无标签'}
-              </div>
-            );
-          })()}
+        <div className="h-full overflow-y-auto hide-scrollbar smooth-scroll-container scrollbar-smooth scrollbar-hide" ref={scrollContainerRef}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={visibleTags.map(tag => tag.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {isLoading ? (
+                <div className="text-sm text-theme-text-muted py-4 text-center">加载中...</div>
+              ) : visibleTags.length > 0 ? (
+                <div className="space-y-1">
+                  {renderTagTree()}
+                  {hasMore && (
+                    <div className="text-sm text-theme-text-muted py-4 text-center">
+                      <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 mr-2"></div>
+                      加载更多...
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-theme-text-muted py-4 text-center">
+                  {searchTerm ? '没有找到匹配的标签' : '暂无标签'}
+                </div>
+              )}
+            </SortableContext>
+          </DndContext>
         </div>
       </div>
 
@@ -1777,6 +2485,67 @@ useEffect(() => {
                 className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
               >
                 确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 父标签选择对话框 */}
+      {showParentSelectionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-light-bg dark:bg-dark-surface rounded-lg p-6 shadow-xl max-w-sm w-full mx-4">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/30 mb-4">
+                <FiFolderPlus className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h3 className="text-lg font-medium text-light-text dark:text-dark-text mb-2">
+                {parentSelectionData.title}
+              </h3>
+              <p className="text-sm text-light-muted dark:text-dark-muted mb-4">
+                {parentSelectionData.message}
+              </p>
+            </div>
+            
+            {/* 父标签选项列表 */}
+            <div className="mb-4 max-h-60 overflow-y-auto">
+              {parentSelectionData.options.map((option, index) => (
+                <button
+                  key={option.id}
+                  onClick={() => handleParentSelect(option)}
+                  className="w-full text-left px-3 py-2 mb-2 rounded-md border border-gray-200 dark:border-gray-600 hover:bg-light-elevated dark:hover:bg-dark-elevated transition-colors flex items-center"
+                  style={{
+                    backgroundColor: 'var(--theme-surface)',
+                    borderColor: 'var(--theme-border)',
+                    color: 'var(--theme-text)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--theme-elevated)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--theme-surface)';
+                  }}
+                >
+                  <span 
+                    className="inline-block w-3 h-3 rounded-full mr-2" 
+                    style={{ backgroundColor: option.color }}
+                  ></span>
+                  <span>{option.name}</span>
+                </button>
+              ))}
+            </div>
+            
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={closeParentSelectionModal}
+                className="px-4 py-2 bg-light-elevated dark:bg-dark-elevated hover:bg-light-border dark:hover:bg-dark-border text-light-text dark:text-dark-text rounded-md transition-colors"
+                style={{
+                  backgroundColor: 'var(--theme-elevated)',
+                  borderColor: 'var(--theme-border)',
+                  color: 'var(--theme-text)'
+                }}
+              >
+                取消
               </button>
             </div>
           </div>
