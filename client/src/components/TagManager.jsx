@@ -1015,6 +1015,14 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           const updatedTags = localConfigManager.getTags();
           setAllTags(updatedTags);
           
+          // 重新构建标签层次结构和更新可见标签列表
+          const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+          setTagHierarchy(hierarchy);
+          
+          // 扁平化标签树用于显示
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
+          
           window.showToast(`标签 "${tag.name}" 已设置为父标签`, 'success');
           console.log('标签已设置为父标签:', tag.name);
         } catch (error) {
@@ -1028,9 +1036,9 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
         try {
           console.log('开始移动标签到父标签:', tag.name);
           
-          // 获取所有可以作为父标签的标签（没有parentId的标签，且不是当前标签）
+          // 获取所有可以作为父标签的标签（已经是父标签的标签，且不是当前标签）
           const allTags = localConfigManager.getTags();
-          const parentCandidates = allTags.filter(t => !t.parentId && t.id !== tag.id);
+          const parentCandidates = allTags.filter(t => t.isParent && t.id !== tag.id);
           
           if (parentCandidates.length === 0) {
             window.showToast('没有可用的父标签', 'warning');
@@ -1060,6 +1068,14 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
                 // 直接获取更新后的标签数据，不重新从数据库加载
                 const updatedTags = localConfigManager.getTags();
                 setAllTags(updatedTags);
+                
+                // 重新构建标签层次结构和更新可见标签列表
+                const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+                setTagHierarchy(hierarchy);
+                
+                // 扁平化标签树用于显示
+                const flattenedTags = flattenTagTree(rootTags);
+                setVisibleTags(flattenedTags);
                 
                 window.showToast(`标签 "${tag.name}" 已移动到父标签 "${selectedParent.name}"`, 'success');
                 console.log('标签移动到父标签完成:', tag.name, '->', selectedParent.name);
@@ -1101,6 +1117,14 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           // 直接获取更新后的标签数据，不重新从数据库加载
           const updatedTags = localConfigManager.getTags();
           setAllTags(updatedTags);
+          
+          // 重新构建标签层次结构和更新可见标签列表
+          const { hierarchy, rootTags } = buildTagHierarchy(updatedTags);
+          setTagHierarchy(hierarchy);
+          
+          // 扁平化标签树用于显示
+          const flattenedTags = flattenTagTree(rootTags);
+          setVisibleTags(flattenedTags);
           
           window.showToast(`标签 "${tag.name}" 已从父标签中移出`, 'success');
           console.log('标签已从父标签中移出:', tag.name);
@@ -1479,13 +1503,13 @@ useEffect(() => {
     const hierarchy = {};
     const rootTags = [];
     
-    // 首先创建所有标签的映射
+    // 首先创建所有标签的映射，保留原有的isParent属性
     tags.forEach(tag => {
       hierarchy[tag.id] = {
         ...tag,
         children: [],
         level: 0,
-        isParent: false
+        isParent: tag.isParent || false // 保留原有的isParent属性
       };
     });
     
@@ -1493,7 +1517,7 @@ useEffect(() => {
     tags.forEach(tag => {
       if (tag.parentId && hierarchy[tag.parentId]) {
         hierarchy[tag.parentId].children.push(hierarchy[tag.id]);
-        hierarchy[tag.parentId].isParent = true;
+        hierarchy[tag.parentId].isParent = true; // 如果有子标签，设置为父标签
         hierarchy[tag.id].level = hierarchy[tag.parentId].level + 1;
       } else {
         rootTags.push(hierarchy[tag.id]);
