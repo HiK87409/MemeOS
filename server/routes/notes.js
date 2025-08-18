@@ -1346,6 +1346,71 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
     }
   });
 
+  // 更新标签顺序
+  router.put('/tags/order', async (req, res) => {
+    try {
+      const { tagOrders } = req.body;
+      
+      if (!tagOrders || !Array.isArray(tagOrders)) {
+        return res.status(400).json({ error: '标签顺序数据格式不正确' });
+      }
+
+      // 使用全局userId常量
+      const results = {
+        updated: [],
+        errors: []
+      };
+
+      // 批量更新标签顺序
+      for (const orderData of tagOrders) {
+        try {
+          const { tagId, sortOrder } = orderData;
+          
+          if (!tagId || sortOrder === undefined) {
+            results.errors.push({
+              tagId,
+              error: '标签ID和排序顺序不能为空'
+            });
+            continue;
+          }
+
+          // 更新标签的sort_order字段
+          const updateResult = await tagModel.updateTag(userId, tagId, { sort_order: sortOrder });
+          
+          if (updateResult.success) {
+            results.updated.push({
+              tagId,
+              sortOrder
+            });
+          } else {
+            results.errors.push({
+              tagId,
+              error: '更新标签顺序失败'
+            });
+          }
+        } catch (error) {
+          results.errors.push({
+            tagId: orderData.tagId,
+            error: '处理标签顺序失败: ' + error.message
+          });
+        }
+      }
+
+      // 获取更新后的完整标签列表
+      const finalTags = await tagModel.getAllTags(userId);
+
+      res.json({
+        success: true,
+        message: '标签顺序更新完成',
+        results: results,
+        tags: finalTags
+      });
+    } catch (error) {
+      // 静默处理标签顺序更新错误
+      res.status(500).json({ error: '标签顺序更新失败' });
+    }
+  });
+
   // 同步所有标签配置
   router.post('/tags/sync', async (req, res) => {
     try {

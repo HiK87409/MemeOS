@@ -355,6 +355,18 @@ export const renameTag = async (oldTagName, newTagName) => {
   }
 };
 
+// 更新标签顺序
+export const updateTagOrder = async (tagOrders) => {
+  try {
+    // 调用API更新标签顺序
+    const response = await api.put('/notes/tags/order', { tagOrders });
+    return response.data;
+  } catch (error) {
+    console.error('更新标签顺序失败:', error);
+    throw error;
+  }
+};
+
 
 
 // 根据标签获取我的笔记
