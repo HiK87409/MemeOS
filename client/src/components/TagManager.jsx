@@ -1110,8 +1110,9 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
           const siblings = allTags.filter(t => t.parentId === oldParentId && t.id !== tag.id);
           
           if (siblings.length === 0) {
-            await localConfigManager.updateTag(oldParentId, { isParent: false });
-            console.log('原父标签已取消父标签状态:', oldParentId);
+            // 不再自动取消父标签状态，让用户明确决定是否要取消父标签状态
+            console.log('原父标签已失去所有子标签，但仍保持父标签状态:', oldParentId);
+            window.showToast('父标签已失去所有子标签，但仍保持父标签状态', 'info');
           }
           
           // 直接获取更新后的标签数据，不重新从数据库加载
@@ -1514,15 +1515,19 @@ useEffect(() => {
     });
     
     // 构建层次关系
-    tags.forEach(tag => {
-      if (tag.parentId && hierarchy[tag.parentId]) {
-        hierarchy[tag.parentId].children.push(hierarchy[tag.id]);
-        hierarchy[tag.parentId].isParent = true; // 如果有子标签，设置为父标签
-        hierarchy[tag.id].level = hierarchy[tag.parentId].level + 1;
-      } else {
-        rootTags.push(hierarchy[tag.id]);
-      }
-    });
+        tags.forEach(tag => {
+          if (tag.parentId && hierarchy[tag.parentId]) {
+            hierarchy[tag.parentId].children.push(hierarchy[tag.id]);
+            // 只有当标签已经明确设置为父标签时，才保持isParent为true
+            // 这样可以避免自动将拥有子标签的标签设为父标签
+            if (hierarchy[tag.parentId].isParent) {
+              hierarchy[tag.parentId].isParent = true;
+            }
+            hierarchy[tag.id].level = hierarchy[tag.parentId].level + 1;
+          } else {
+            rootTags.push(hierarchy[tag.id]);
+          }
+        });
     
     return { hierarchy, rootTags };
   }, []);
