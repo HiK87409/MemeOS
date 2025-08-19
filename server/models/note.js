@@ -418,9 +418,9 @@ class NoteModel {
     });
 
     return new Promise((resolve, reject) => {
-      // 暂时使用简单的数字ID以保持数据库兼容性
-      // 未来可以考虑迁移到字符串ID
-      const noteId = Date.now(); // 使用时间戳作为ID
+      // 使用ID生成器生成字符串数字形式的ID，避免浮点型
+      const IdGenerator = require('../utils/idGenerator');
+      const noteId = IdGenerator.generateNoteId(userId || 'default_user');
       
       let sql, params;
       
