@@ -73,10 +73,10 @@ const NoteHistory = ({ noteId, currentContent, currentTags, onRestore }) => {
       // 重新加载历史记录
       await loadHistory();
       
-      alert('恢复成功！');
+      window.showToast('恢复成功！', 'success');
     } catch (error) {
       console.error('恢复失败:', error);
-      alert('恢复失败: ' + error.message);
+      window.showToast('恢复失败: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }

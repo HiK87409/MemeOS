@@ -430,7 +430,7 @@ const MarkdownRenderer = ({ content, className = '', onContentChange, editable =
     // 处理链接
     a: ({ href, children, ...props }) => {
       // 检查是否是HTTP笔记引用链接格式 http(s)://{host}:{port}/note/{id}
-      const noteRefMatch = href && href.match(/^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(?::(\d+))?\/note\/(\d+)$/);
+      const noteRefMatch = href && href.match(/^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(?::(\d+))?\/note\/([a-zA-Z0-9\-_.]+)$/);
       if (noteRefMatch) {
             const [, host, port, noteId] = noteRefMatch;
             // 如果没有端口号，根据协议设置默认端口

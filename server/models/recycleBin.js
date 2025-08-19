@@ -169,65 +169,40 @@ class RecycleBinModel {
           return;
         }
         
-        // 生成笔记哈希
-        const NoteModel = require('./note');
-        const noteModel = new NoteModel(this.db);
-        const noteHash = noteModel.generateNoteHash({
-          content: row.content,
-          tags: row.tags ? row.tags.split(',').map(tag => tag.trim()) : [],
-          created_at: row.created_at
-        });
-        
-        // 检查是否已存在相同哈希的笔记
-        noteModel.checkDuplicateByHash(row.user_id, noteHash)
-          .then(duplicateResult => {
-            if (duplicateResult.exists) {
-              // 检测到重复笔记，跳过恢复
-              // 从回收站删除重复的记录
-              this.db.run('DELETE FROM recycle_bin WHERE id = ?', [row.id], (err) => {
-                if (err) {
-                  // 静默处理错误
-                  reject(err);
-                } else {
-                  resolve({ success: true, restoredNoteId: row.note_id, skipped: true, message: '笔记已存在，跳过恢复' });
-                }
-              });
-            } else {
-              // 将笔记恢复到notes表
-              this.db.run(
-                `INSERT INTO notes (id, content, tags, user_id, is_pinned, hash, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                  row.note_id,
-                  row.content,
-                  row.tags,
-                  row.user_id,
-                  row.is_pinned,
-                  noteHash,
-                  row.created_at,
-                  new Date().toISOString()
-                ],
-                (err) => {
-                  if (err) {
-                    // 静默处理错误
-                    reject(err);
-                    return;
-                  }
-                  
-                  // 从回收站删除
-                  this.db.run('DELETE FROM recycle_bin WHERE id = ?', [row.id], (err) => {
-                    if (err) {
-                      // 静默处理错误
-                      reject(err);
-                    } else {
-                      // 单个恢复成功
-                      resolve({ success: true, restoredNoteId: row.note_id });
-                    }
-                  });
-                }
-              );
+        // 取消哈希验证，直接恢复笔记
+        // 将笔记恢复到notes表
+        this.db.run(
+          `INSERT INTO notes (id, content, tags, user_id, is_pinned, hash, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            row.note_id,
+            row.content,
+            row.tags,
+            row.user_id,
+            row.is_pinned,
+            '', // 空哈希值
+            row.created_at,
+            new Date().toISOString()
+          ],
+          (err) => {
+            if (err) {
+              // 静默处理错误
+              reject(err);
+              return;
             }
-          });
+            
+            // 从回收站删除
+            this.db.run('DELETE FROM recycle_bin WHERE id = ?', [row.id], (err) => {
+              if (err) {
+                // 静默处理错误
+                reject(err);
+              } else {
+                // 单个恢复成功
+                resolve({ success: true, restoredNoteId: row.note_id });
+              }
+            });
+          }
+        );
         })
         .catch(err => {
           // 静默处理错误
@@ -354,127 +329,48 @@ class RecycleBinModel {
             
             const row = rows[index];
             
-            // 生成笔记哈希
-            const NoteModel = require('./note');
-            const noteModel = new NoteModel(this.db);
-            const noteHash = noteModel.generateNoteHash({
-              content: row.content,
-              tags: row.tags ? row.tags.split(',').map(tag => tag.trim()) : [],
-              created_at: row.created_at
-            });
-            
-            // 检查是否已存在相同哈希的笔记
-            // 记录笔记重复性检查
-            // 记录笔记详细信息
-            
-            noteModel.checkDuplicateByHash(row.user_id, noteHash)
-              .then(duplicateResult => {
-                // 记录重复检查结果
-                
-                // 如果检测到重复，获取重复笔记的详细信息进行对比
-                if (duplicateResult.exists) {
-                  // 检测到可能的重复笔记，获取详细信息
-                  
-                  // 获取重复笔记的详细信息
-                  noteModel.getById(duplicateResult.noteId, row.user_id)
-                    .then(duplicateNote => {
-                      // 记录重复笔记详细信息
-                      
-                      // 比较两个笔记的详细内容
-                      const isReallyDuplicate = noteHash === duplicateNote.hash;
-                      // 记录哈希对比结果
-                      
-                      if (isReallyDuplicate) {
-                        // 检测到重复笔记，跳过恢复
-                        duplicateCount++;
-                        duplicateNotes.push({
-                          noteId: row.note_id,
-                          existingNoteId: duplicateResult.noteId,
-                          reason: '重复笔记'
-                        });
-                        // 从回收站删除重复的记录
-                        this.db.run('DELETE FROM recycle_bin WHERE id = ?', [row.id], (err) => {
-                          if (err) {
-                            // 静默处理错误
-                            errorCount++;
-                          } else {
-                            // 跳过重复笔记恢复
-                          }
-                          processNext(index + 1);
-                        });
-                      } else {
-                        // 哈希不匹配，可能是误判，继续恢复
-                        // 哈希不匹配，可能是误判，继续恢复
-                        restoreNote();
-                      }
-                    })
-                    .catch(err => {
-                      // 静默处理错误
-                      // 获取详细信息失败，保守处理，跳过恢复
-                      duplicateCount++;
-                      duplicateNotes.push({
-                        noteId: row.note_id,
-                        existingNoteId: duplicateResult.noteId,
-                        reason: '获取重复笔记信息失败'
-                      });
-                      this.db.run('DELETE FROM recycle_bin WHERE id = ?', [row.id], (err) => {
-                        if (err) {
-                          // 静默处理错误
-                          errorCount++;
-                        }
-                        processNext(index + 1);
-                      });
-                    });
-                } else {
-                  // 没有重复，直接恢复
-                  restoreNote();
-                }
-                
-                // 恢复笔记的函数
-                const restoreNote = () => {
-                  // 将笔记恢复到notes表
-                  this.db.run(
-                    `INSERT INTO notes (id, content, tags, user_id, is_pinned, hash, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [
-                      row.note_id,
-                      row.content,
-                      row.tags,
-                      row.user_id,
-                      row.is_pinned,
-                      noteHash,
-                      row.created_at,
-                      new Date().toISOString()
-                    ],
-                    (err) => {
+            // 取消哈希验证，直接恢复笔记
+            const restoreNote = () => {
+              // 将笔记恢复到notes表
+              this.db.run(
+                `INSERT INTO notes (id, content, tags, user_id, is_pinned, hash, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  row.note_id,
+                  row.content,
+                  row.tags,
+                  row.user_id,
+                  row.is_pinned,
+                  '', // 空哈希值
+                  row.created_at,
+                  new Date().toISOString()
+                ],
+                (err) => {
+                  if (err) {
+                    // 静默处理错误
+                    errorCount++;
+                    processNext(index + 1);
+                  } else {
+                    // 笔记已经成功恢复到notes表，先增加恢复计数
+                    restoredCount++;
+                    // 笔记恢复成功
+                    // 从回收站删除
+                    this.db.run('DELETE FROM recycle_bin WHERE id = ?', [row.id], (err) => {
                       if (err) {
                         // 静默处理错误
-                        errorCount++;
-                        processNext(index + 1);
+                        // 即使从回收站删除失败，笔记已经恢复，不算错误
                       } else {
-                        // 笔记已经成功恢复到notes表，先增加恢复计数
-                        restoredCount++;
-                        // 笔记恢复成功
-                        // 从回收站删除
-                        this.db.run('DELETE FROM recycle_bin WHERE id = ?', [row.id], (err) => {
-                          if (err) {
-                            // 静默处理错误
-                            // 即使从回收站删除失败，笔记已经恢复，不算错误
-                          } else {
-                            // 从回收站删除成功
-                          }
-                          processNext(index + 1);
-                        });
+                        // 从回收站删除成功
                       }
-                    }
-                  );
-                };
-              })
-              .catch(err => {
-                // 静默处理错误
-                errorCount++;
-                processNext(index + 1);
-              });
+                      processNext(index + 1);
+                    });
+                  }
+                }
+              );
+            };
+            
+            // 直接恢复笔记
+            restoreNote();
           };
           
           processNext(0);

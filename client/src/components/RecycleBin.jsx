@@ -146,9 +146,9 @@ const RecycleBin = () => {
       }
       
       if (message) {
-        alert(message);
+        window.showToast(message, 'success');
       } else {
-        alert('恢复操作完成，但没有笔记被恢复');
+        window.showToast('恢复操作完成，但没有笔记被恢复', 'info');
       }
       
       // 重新加载回收站数据

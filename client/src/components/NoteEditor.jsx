@@ -714,7 +714,22 @@ const NoteEditor = ({
       setContent(prev => prev + '\n' + referenceText + '\n');
     }
     
-    // 引用已插入，不再需要创建双向链接
+    // 引用已插入，立即处理双向链接
+    if (isEditMode && note) {
+      try {
+        console.log('[双向链接] 在插入引用后立即处理双向链接，笔记ID:', note.id);
+        const bidirectionalResult = await processBidirectionalLinks(note.id, newContent || content);
+        console.log('[双向链接] 插入引用后双向链接处理完成:', bidirectionalResult);
+        
+        // 触发引用数据更新
+        if (bidirectionalResult.success) {
+          const { default: globalEvents, GLOBAL_EVENTS } = await import('../utils/globalEvents');
+          globalEvents.emit(GLOBAL_EVENTS.NOTE_REFERENCES_UPDATED, { noteId: note.id });
+        }
+      } catch (error) {
+        console.warn('[双向链接] 插入引用后处理双向链接失败:', error);
+      }
+    }
     
     // 关闭引用选择器
     setShowReferenceSelector(false);

@@ -182,14 +182,16 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
     }
     
     console.log('[HomePage] 开始删除流程，移动到回收站');
-    const originalNotes = [...notes];
-    setNotes(prevNotes => prevNotes.filter(note => note.id !== id));
 
     try {
       // 调用API删除笔记（服务器会处理移动到回收站的逻辑）
       console.log('[HomePage] 调用deleteNote API');
       await deleteNote(id);
       console.log('[HomePage] deleteNote API调用成功');
+      
+      // 静默移除已删除的笔记，不显示动画效果
+      setNotes(prevNotes => prevNotes.filter(note => note.id !== id));
+      
       await refreshTags();
       console.log('[HomePage] 删除完成，已移动到回收站，标签已刷新');
     } catch (err) {
@@ -197,7 +199,6 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
       const errorMessage = err.response?.data?.message || '删除笔记失败，请重试';
       setError(errorMessage);
       console.error('[DELETE] 删除笔记失败:', err.response?.data || err);
-      setNotes(originalNotes);
     }
   };
 

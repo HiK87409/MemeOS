@@ -10,7 +10,7 @@ export const extractReferences = (content) => {
   
   const references = [];
   // 匹配 HTTP 格式的笔记引用链接，支持复杂ID格式
-  const linkPattern = /\[([^\]]+)\]\(http:\/\/localhost:(\d+)\/note\/([a-zA-Z0-9\-_]+)\)/g;
+  const linkPattern = /\[([^\]]+)\]\(http:\/\/localhost:(\d+)\/note\/([a-zA-Z0-9\-_.]+)\)/g;
   
   let match;
   while ((match = linkPattern.exec(content)) !== null) {

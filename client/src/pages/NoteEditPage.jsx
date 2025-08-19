@@ -22,7 +22,7 @@ const NoteEditPage = () => {
       navigate('/');
     } catch (error) {
       console.error('创建笔记失败:', error);
-      alert('创建笔记失败，请重试');
+      window.showToast('创建笔记失败，请重试', 'error');
     } finally {
       setIsSubmitting(false);
     }

@@ -1034,7 +1034,7 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
           
           // 解析笔记中的引用
           const httpReferences = [];
-          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:3000\/note\/(\d+)\)/g;
+          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:3000\/note\/([a-zA-Z0-9\-_.]+)\)/g;
           let match;
           
           while ((match = httpReferenceRegex.exec(content)) !== null) {
@@ -1141,7 +1141,7 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
           
           // 解析笔记中的引用
           const httpReferences = [];
-          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:3000\/note\/(\d+)\)/g;
+          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:3000\/note\/([a-zA-Z0-9\-_.]+)\)/g;
           let match;
           
           while ((match = httpReferenceRegex.exec(content)) !== null) {
@@ -1985,7 +1985,7 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
       }
       
       // 提取所有带特殊字符的引用链接，支持多种端口和复杂ID格式
-      const referencePattern = new RegExp(`${REFERENCE_PREFIX}\\[([^\\]]+)\\]\\(http://localhost:(\\d+)/note/([a-zA-Z0-9\\-_]+)\\)`, 'g');
+      const referencePattern = new RegExp(`${REFERENCE_PREFIX}\[([^\]]+)\]\(http://localhost:(\d+)/note/([a-zA-Z0-9\-_.]+)\)`, 'g');
       const references = [];
       let match;
       
@@ -2118,11 +2118,11 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
       // 4. 带前缀的引? trrr> [<u>111</u>](http://localhost:{port}/note/176)
       const httpLinkPatterns = [
         // 带前缀的Markdown链接格式（如：trrr> [<u>111</u>](http://localhost:{port}/note/176)?
-        /(?:^|\s)([^>\s]*>)?\s*\[([^\]]*)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_]+)\)/gm,
+        /(?:^|\s)([^>\s]*>)?\s*\[([^\]]*)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)\)/gm,
         // 普通Markdown链接格式（包括可能的HTML标签?
-        /\[([^\]]*)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_]+)\)/g,
+        /\[([^\]]*)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)\)/g,
         // 纯URL格式
-        /(?<!\]\()http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_]+)(?!\))/g
+        /(?<!\]\()http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)(?!\))/g
       ];
       
       const httpReferences = [];
