@@ -105,7 +105,6 @@ cd ..
 
 ```bash
 cp -r client/dist/* www/
-cd ..
 ```
 
 修复 concurrently 的执行权限：
