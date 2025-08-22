@@ -57,7 +57,7 @@ npm run start:all
 
 ### Mac/Linux 用户
 
-需要按照以下步骤进行部署：
+需要按照以下步骤进行部署(以下所有命令都需要在根目录下运行，例如MemeOS-1.0.6)：
 
 #### 1. 清理构建缓存
 
@@ -76,6 +76,7 @@ rm -rf server/node_modules
 
 ```bash
 cd client && npm install --ignore-scripts
+cd ..
 ```
 > 注意：使用`--ignore-scripts`参数避免husky钩子错误
 
@@ -83,12 +84,14 @@ cd client && npm install --ignore-scripts
 
 ```bash
 cd server && npm install
+cd ..
 ```
 
 #### 3. 编译前端代码
 
 ```bash
 cd client && npm run build
+cd ..
 ```
 
 成功编译React应用后，会生成优化后的生产版本文件到client/dist目录：
@@ -102,13 +105,19 @@ cd client && npm run build
 
 ```bash
 cp -r client/dist/* www/
+cd ..
 ```
 
-启动后端服务器：
+修复 concurrently 的执行权限：
 
 ```bash
-cd server && npm start
+chmod +x node_modules/.bin/concurrently
 ```
+启动应用
+```bash
+npm run start:all
+```
+
 
 服务器成功初始化数据库并运行在端口30002
 
