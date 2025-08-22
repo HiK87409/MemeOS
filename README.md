@@ -109,6 +109,7 @@ cd memeos 或 cd MemeOS-main
 
 # 同时启动前端和后端
 npm run start:all
+```
 访问应用
 
 前端界面: http://localhost:3000
