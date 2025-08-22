@@ -53,68 +53,104 @@ Windows 用户可以直接使用已打包的版本：
 ```bash
 # 启动应用
 npm run start:all
-Mac/Linux 用户
+```
+
+### Mac/Linux 用户
+
 需要按照以下步骤进行部署：
 
-1. 清理构建缓存
+#### 1. 清理构建缓存
+
 删除所有旧的依赖和构建文件：
 
+```bash
 # 清理客户端缓存
 rm -rf client/node_modules client/dist client/build
 # 清理服务端缓存
 rm -rf server/node_modules
-2. 重新安装依赖
+```
+
+#### 2. 重新安装依赖
+
 客户端依赖安装：
 
+```bash
 cd client && npm install --ignore-scripts
-注意：使用--ignore-scripts参数避免husky钩子错误
+```
+> 注意：使用`--ignore-scripts`参数避免husky钩子错误
 
 服务端依赖安装：
 
+```bash
 cd server && npm install
-3. 编译前端代码
-cd client && npm run build
-成功编译React应用后，会生成优化后的生产版本文件到client/dist目录：
+```
 
-index.html (6.15 kB)
-assets/index-245cd770.css (84.31 kB)
-assets/index-8882bf30.js (1294.30 kB)
-4. 部署和启动
+#### 3. 编译前端代码
+
+```bash
+cd client && npm run build
+```
+
+成功编译React应用后，会生成优化后的生产版本文件到client/dist目录：
+- index.html (6.15 kB)
+- assets/index-245cd770.css (84.31 kB)
+- assets/index-8882bf30.js (1294.30 kB)
+
+#### 4. 部署和启动
+
 复制前端文件到www目录：
 
+```bash
 cp -r client/dist/* www/
+```
+
 启动后端服务器：
 
+```bash
 cd server && npm start
+```
+
 服务器成功初始化数据库并运行在端口30002
 
-可能遇到的问题
-依赖安装问题
-husky钩子错误：客户端安装时必须使用--ignore-scripts参数
-网络问题：如果依赖下载缓慢，可以尝试使用国内镜像源
-npm config set registry https://registry.npmmirror.com
-Node.js版本不兼容：确保Node.js版本在16.0.0以上
-编译问题
-确保有足够的磁盘空间和内存
-某些旧版浏览器可能不支持最新的JavaScript特性，请使用现代浏览器
-启动问题
-如果端口30002被占用，可以修改server/index.js中的端口配置
-数据库锁定问题：确保没有其他进程正在使用数据库文件
-使用步骤
-下载/克隆本项目
+## 可能遇到的问题
 
-git clone <repository-url>
-cd memeos 或 cd MemeOS-main
-启动应用
+### 依赖安装问题
+- **husky钩子错误**：客户端安装时必须使用`--ignore-scripts`参数
+- **网络问题**：如果依赖下载缓慢，可以尝试使用国内镜像源
+  ```bash
+  npm config set registry https://registry.npmmirror.com
+  ```
+- **Node.js版本不兼容**：确保Node.js版本在16.0.0以上
 
-# 同时启动前端和后端
-npm run start:all
+### 编译问题
+- 确保有足够的磁盘空间和内存
+- 某些旧版浏览器可能不支持最新的JavaScript特性，请使用现代浏览器
+
+### 启动问题
+- 如果端口30002被占用，可以修改`server/index.js`中的端口配置
+- 数据库锁定问题：确保没有其他进程正在使用数据库文件
+
+## 使用步骤
+
+1. **下载/克隆本项目**
+   ```bash
+   git clone <repository-url>
+   cd memeos 或 cd MemeOS-main
+   ```
+
+2. **启动应用**
+   ```bash
+   # 同时启动前端和后端
+   npm run start:all
+   ```
+
+3. **访问应用**
+   - 前端界面: http://localhost:3000
+   - 后端API: http://localhost:30002
+
+## 项目结构
+
 ```
-访问应用
-
-前端界面: http://localhost:3000
-后端API: http://localhost:30002
-项目结构
 memeos/
 ├── client/                 # 前端应用
 │   ├── src/               # 源代码
@@ -129,33 +165,51 @@ memeos/
 │   └── package.json       # 后端依赖
 ├── www/                   # 静态文件服务
 └── README.md              # 项目说明
-数据库管理
-数据库文件
-database.sqlite - 主数据库文件
-backup_database.sqlite - 备份数据库文件
-database.db - 旧版数据库文件（兼容性保留）
-数据库清理
+```
+
+## 数据库管理
+
+### 数据库文件
+- `database.sqlite` - 主数据库文件
+- `backup_database.sqlite` - 备份数据库文件
+- `database.db` - 旧版数据库文件（兼容性保留）
+
+### 数据库清理
+
 如果需要清理所有数据并重置数据库：
 
+```bash
 # 运行数据库清理脚本
 node clean_database.js --force
-数据库初始化
+```
+
+### 数据库初始化
+
+```bash
 # 初始化数据库结构
 node server/init_database.js
-API 文档
-详细的 API 文档请参考 server/API_DOCUMENTATION.md 文件。
+```
 
-主要 API 端点
-GET /api/notes - 获取笔记列表
-POST /api/notes - 创建新笔记
-PUT /api/notes/:id - 更新笔记
-DELETE /api/notes/:id - 删除笔记
-GET /api/tags - 获取标签列表
-POST /api/tags - 创建新标签
-GET /api/config - 获取配置信息
-POST /api/upload - 文件上传
-开发指南
-可用脚本
+## API 文档
+
+详细的 API 文档请参考 `server/API_DOCUMENTATION.md` 文件。
+
+### 主要 API 端点
+
+- `GET /api/notes` - 获取笔记列表
+- `POST /api/notes` - 创建新笔记
+- `PUT /api/notes/:id` - 更新笔记
+- `DELETE /api/notes/:id` - 删除笔记
+- `GET /api/tags` - 获取标签列表
+- `POST /api/tags` - 创建新标签
+- `GET /api/config` - 获取配置信息
+- `POST /api/upload` - 文件上传
+
+## 开发指南
+
+### 可用脚本
+
+```bash
 # 开发模式
 npm run dev:client      # 启动前端开发服务器
 npm run dev:server      # 启动后端开发服务器
@@ -168,28 +222,37 @@ npm run build:server    # 构建后端应用
 # 其他
 npm run clean           # 清理构建文件
 npm run lint            # 代码检查
-目录结构说明
-前端 (client/)
-src/components/ - React 组件
-src/pages/ - 页面组件
-src/hooks/ - 自定义 Hooks
-src/api/ - API 调用封装
-src/utils/ - 工具函数
-后端 (server/)
-routes/ - API 路由定义
-models/ - 数据库模型
-utils/ - 工具函数
-uploads/ - 文件上传存储
-常见问题
-Q: 数据库文件被锁定怎么办？
+```
+
+### 目录结构说明
+
+#### 前端 (client/)
+- `src/components/` - React 组件
+- `src/pages/` - 页面组件
+- `src/hooks/` - 自定义 Hooks
+- `src/api/` - API 调用封装
+- `src/utils/` - 工具函数
+
+#### 后端 (server/)
+- `routes/` - API 路由定义
+- `models/` - 数据库模型
+- `utils/` - 工具函数
+- `uploads/` - 文件上传存储
+
+## 常见问题
+
+### Q: 数据库文件被锁定怎么办？
 A: 停止运行中的服务器进程，然后重新操作数据库文件。
 
-Q: 前端无法连接后端怎么办？
+### Q: 前端无法连接后端怎么办？
 A: 检查后端服务器是否正常运行，确认端口配置正确。
 
-联系方式
-如有问题或建议，请通过以下方式联系：
+## 联系方式
 
-提交 Issue
-发送邮件kk@ihuihui.me
-MemeOS - 让笔记管理更简单、更高效！
+如有问题或建议，请通过以下方式联系：
+- 提交 Issue
+- 发送邮件kk@ihuihui.me
+
+---
+
+**MemeOS** - 让笔记管理更简单、更高效！
