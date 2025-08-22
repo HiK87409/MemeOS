@@ -247,25 +247,25 @@ npm run install:all(windows我已经打包，应该可以运行，不可以的�
 rm -rf client/node_modules client/dist client/build
 # 清理服务端缓存
 rm -rf server/node_modules
-```
+
 
 ## 2. 重新安装依赖
 
 ### 客户端依赖安装
 ```bash
 cd client && npm install --ignore-scripts
-```
+
 
 ### 服务端依赖安装
 ```bash
 cd server && npm install
-```
+
 
 ## 3. 编译前端代码
 
 ```bash
 cd client && npm run build
-```
+
 成功编译React应用后，会生成优化后的生产版本文件到client/dist目录：
 - index.html (6.15 kB)
 - assets/index-245cd770.css (84.31 kB)
@@ -276,12 +276,13 @@ cd client && npm run build
 ### 复制前端文件到www目录
 ```bash
 cp -r client/dist/* www/
-```
 
 ### 启动后端服务器
 ```bash
 cd server && npm start
 ```
+
+
 
 ## 安装和部署说明
 
