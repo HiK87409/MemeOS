@@ -15,13 +15,10 @@ import CalendarView from './pages/CalendarView';
 
 import RecycleBinPage from './pages/RecycleBinPage';
 import EnhancedBackupManagerPage from './pages/EnhancedBackupManagerPage';
-import Debug from './pages/Debug';
 import RecycleBin from './components/RecycleBin';
 import BackupManager from './components/BackupManager';
 import NoteEditPage from './pages/NoteEditPage';
-import FullScreenEditorDemo from './pages/FullScreenEditorDemo';
-import BlockSuiteEditorDemo from './pages/BlockSuiteEditorDemo';
-import FontOptimizationPage from './pages/FontOptimizationPage';
+import NoteEditByIdPage from './pages/NoteEditByIdPage';
 import SettingsPage from './pages/SettingsPage';
 
 // 任务管理相关组件
@@ -190,9 +187,6 @@ function AppContentWithEdit() {
         {/* 主内容区域 */}
         <main className="w-full">
           <Routes>
-              {/* 调试页面 */}
-              <Route path="/debug" element={<Debug />} />
-              
               {/* 主页路由 - 不再需要保护，直接访问 */}
               <Route path="/" element={
                 <HomePage 
@@ -214,9 +208,7 @@ function AppContentWithEdit() {
               <Route path="/recycle-bin" element={<RecycleBinPage />} />
               <Route path="/enhanced-backup-manager" element={<EnhancedBackupManagerPage />} />
               <Route path="/edit" element={<NoteEditPage />} />
-              <Route path="/fullscreen-editor" element={<FullScreenEditorDemo />} />
-              <Route path="/blocksuite-editor" element={<BlockSuiteEditorDemo />} />
-              <Route path="/font-optimization" element={<FontOptimizationPage />} />
+              <Route path="/edit/:noteId" element={<NoteEditByIdPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               
               {/* 任务管理相关路由 */}

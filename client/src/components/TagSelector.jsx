@@ -22,7 +22,14 @@ const TagSelector = ({ selectedTags = [], onTagsChange, className = '', autoOpen
   // 使用共享的常用配色
   const allColors = [...commonColors];
   const [isLoadingColors, setIsLoadingColors] = useState(false);
-  const [tagColorMap, setTagColorMap] = useState({}); // 存储标签颜色映射
+  const [tagColorMap, setTagColorMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tagColors');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  }); // 存储标签颜色映射
   const [colorDataLoaded, setColorDataLoaded] = useState(false);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -60,7 +67,7 @@ const TagSelector = ({ selectedTags = [], onTagsChange, className = '', autoOpen
     
     // 如果找不到对应的预设颜色，使用默认颜色
     return {
-      backgroundColor: '#3B82F6', // 默认天蓝色
+      backgroundColor: '#9CA3AF', // 默认灰色
       color: '#ffffff'
     };
   };

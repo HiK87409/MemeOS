@@ -43,18 +43,10 @@ const ReferencesModal = ({ isOpen, onClose, noteId, noteTitle, onNoteClick, trig
     }
   }, [isOpen, triggerPosition]);
 
-  // 加载引用关系数据
+  // 加载引用关系数据 - 使用 WebSocket 事件驱动，不再轮询
   useEffect(() => {
     if (isOpen && noteId) {
       loadReferences();
-      
-      // 添加轮询机制，每30秒更新一次引用数据
-      const pollInterval = setInterval(loadReferences, 30000);
-      
-      // 清理函数
-      return () => {
-        clearInterval(pollInterval);
-      };
     }
   }, [isOpen, noteId]);
 

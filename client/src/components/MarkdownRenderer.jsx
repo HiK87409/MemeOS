@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { API_BASE_URL } from '../config/env.js';
+import { moodWeatherConfig } from '../config/moodWeatherConfig';
 import { 
   initGlobalImageRetry, 
   getImageState, 
@@ -429,49 +430,35 @@ const MarkdownRenderer = ({ content, className = '', onContentChange, editable =
     },
     // 处理链接
     a: ({ href, children, ...props }) => {
-      // 检查是否是HTTP笔记引用链接格式 http(s)://{host}:{port}/note/{id}
-      const noteRefMatch = href && href.match(/^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(?::(\d+))?\/note\/([a-zA-Z0-9\-_.]+)$/);
-      if (noteRefMatch) {
-            const [, host, port, noteId] = noteRefMatch;
-            // 如果没有端口号，根据协议设置默认端口
-            const finalPort = port || (href.startsWith('https://') ? '443' : '80');
-        console.log('[引用链接] 渲染HTTP引用链接，笔记ID:', noteId, '主机:', host, '端口:', finalPort, '可用笔记:', notes?.length || 0);
+      // 检查是否是 wiki-link:// 协议的笔记引用
+      const wikiLinkMatch = href && href.match(/^wiki-link:\/\/note\/([a-zA-Z0-9\-_.]+)$/);
+      if (wikiLinkMatch) {
+        const noteId = wikiLinkMatch[1];
         
-        // 根据ID查找笔记
         const findNoteById = (id) => {
           if (!notes || !Array.isArray(notes)) return null;
-          // 支持新的复杂ID格式和旧的数字ID格式
           return notes.find(note => {
             if (typeof note.id === 'string' && typeof id === 'string') {
               return note.id === id;
             }
-            // 兼容旧的数字ID
             return note.id === parseInt(id) || note.id.toString() === id.toString();
           });
         };
         
         const targetNote = findNoteById(noteId);
         const noteExists = !!targetNote;
-        const noteTitle = targetNote ? (targetNote.title || '无标题') : children;
+        const rawNoteTitle = targetNote ? (targetNote.title || '无标题') : children;
+        // 排除心情和天气标记
+        const noteTitle = moodWeatherConfig.removeAllMoodAndWeather(rawNoteTitle);
         
-        const handleNoteRefClick = (e) => {
+        const handleWikiLinkClick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          console.log('[引用点击] 点击HTTP引用链接，笔记ID:', noteId, '类型:', typeof noteId);
-          console.log('[引用点击] 目标笔记:', targetNote, '是否存在:', noteExists);
-          console.log('[引用点击] onNoteClick函数:', typeof onNoteClick, onNoteClick ? '存在' : '不存在');
           if (onNoteClick && noteExists) {
-            console.log('[引用点击] 准备跳转到笔记:', targetNote.title, 'ID:', targetNote.id, 'ID类型:', typeof targetNote.id);
             onNoteClick(targetNote.id);
-            console.log('[引用点击] 已调用onNoteClick函数');
-          } else if (!noteExists) {
-            console.log('[引用点击] 未找到笔记ID:', noteId, '可用笔记:', notes?.map(n => `${n.id}:${n.title}(${typeof n.id})`) || []);
-          } else if (!onNoteClick) {
-            console.log('[引用点击] onNoteClick函数不存在');
           }
         };
         
-        // 引用链接的特殊样式 - 使用自定义引用颜色
         const linkClass = noteExists 
           ? "underline cursor-pointer transition-colors duration-200"
           : "text-gray-400 dark:text-gray-500 line-through cursor-not-allowed";
@@ -480,34 +467,60 @@ const MarkdownRenderer = ({ content, className = '', onContentChange, editable =
           ? `跳转到笔记: ${noteTitle}`
           : `笔记不存在 (ID: ${noteId})`;
         
-        // 处理引用链接显示 - 直接显示纯文本
-        const processSpecialChars = (text) => {
-          if (typeof text !== 'string') return text;
-          // 直接返回原始文本，无需处理特殊字符
-          return text;
-        };
-
         return (
           <a
             href="#"
-            className={`${linkClass} note-reference-link px-2 py-1 rounded ${noteExists ? 'bg-theme-elevated border-l-2 border-theme-border' : ''} focus:outline-none focus:ring-0`}
-            onClick={handleNoteRefClick}
+            className={`${linkClass} note-reference-link focus:outline-none focus:ring-0`}
+            onClick={handleWikiLinkClick}
             title={title}
             style={{ 
               fontFamily: 'inherit',
-              textRendering: 'optimizeLegibility',
-              fontFeatureSettings: '"kern" 1, "liga" 1',
-              color: noteExists ? (textColors?.reference || textColors?.link || 'var(--theme-primary)') : 'var(--theme-text-secondary)',
-              textDecoration: noteExists ? 'none' : 'line-through'
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: noteExists ? '3px 10px 3px 8px' : '3px 8px',
+              borderRadius: '6px',
+              fontSize: '0.9em',
+              fontWeight: '500',
+              textDecoration: 'none',
+              transition: 'all 0.2s ease',
+              cursor: noteExists ? 'pointer' : 'not-allowed',
+              color: noteExists ? '#fff' : 'var(--theme-text-secondary)',
+              backgroundColor: noteExists 
+                ? (textColors?.reference || textColors?.link || 'var(--theme-primary)') 
+                : 'transparent',
+              opacity: noteExists ? 0.9 : 0.5,
+              border: noteExists ? 'none' : '1px dashed var(--theme-text-secondary)',
+              lineHeight: '1.4',
+              verticalAlign: 'baseline',
+            }}
+            onMouseEnter={(e) => {
+              if (noteExists) {
+                e.currentTarget.style.opacity = '1';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = `0 2px 8px rgba(0,0,0,0.15)`;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (noteExists) {
+                e.currentTarget.style.opacity = '0.9';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }
             }}
             {...props}
           >
-            <span className="reference-text">{processSpecialChars(children)}</span>
+            {noteExists && (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+            )}
+            <span className="reference-text">{children}</span>
             {!noteExists && " (不存在)"}
           </a>
         );
       }
-      
 
       
       // 普通链接 - 确保href有效且不是javascript协议
@@ -601,12 +614,23 @@ const MarkdownRenderer = ({ content, className = '', onContentChange, editable =
     ),
   };
 
+  // 将 [[noteId|displayText]] wiki-link 语法转换为 Markdown 链接格式
+  // 格式: [[noteId]] -> [noteId](wiki-link://note/noteId)
+  // 格式: [[noteId|displayText]] -> [displayText](wiki-link://note/noteId)
+  const preprocessWikiLinks = (text) => {
+    if (!text) return text;
+    return text.replace(/\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g, (match, noteId, displayText) => {
+      const display = displayText || noteId;
+      return `[${display}](wiki-link://note/${noteId.trim()})`;
+    });
+  };
+
   // 渲染内容，特殊处理任务列表
   const renderContent = () => {
     if (!content) return null;
     
-    // 直接使用原始内容
-    const processedContent = content;
+    // 预处理 wiki-link 语法
+    const processedContent = preprocessWikiLinks(content);
     const lines = processedContent.split('\n');
     const hasTaskList = lines.some(line => 
       line.trim().startsWith('- [ ]') || line.trim().startsWith('- [x]')

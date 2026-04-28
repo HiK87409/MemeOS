@@ -10,7 +10,14 @@ const Header = ({ onSearch, searchQuery = '', selectedTag, onTagChange, onOpenRe
   const [showSearch, setShowSearch] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery || '');
   const [allColors, setAllColors] = useState([]);
-  const [tagColorMap, setTagColorMap] = useState({});
+  const [tagColorMap, setTagColorMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tagColors');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const searchInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -95,23 +102,21 @@ const Header = ({ onSearch, searchQuery = '', selectedTag, onTagChange, onOpenRe
   // 监听标签颜色更新事件
   useEffect(() => {
     const handleTagColorsUpdated = async (event) => {
-      // 重新从服务器同步数据
-      try {
-        const { fetchTagColors } = await import('../api/notesApi.js');
-        const updatedTagColors = await fetchTagColors();
+      const { tagName, color } = event.detail || {};
+      
+      // 优先使用事件携带的新颜色数据直接更新本地状态，避免从服务器获取旧数据导致颜色闪回默认值
+      if (tagName && color) {
+        setTagColorMap(prev => ({
+          ...prev,
+          [tagName]: color
+        }));
         
-        // 更新本地状态和存储
-        setTagColorMap(updatedTagColors);
-        localStorage.setItem('tagColors', JSON.stringify(updatedTagColors));
-      } catch (error) {
-        console.error('同步标签颜色失败:', error);
-        // 如果同步失败，至少更新当前标签的颜色
-        const { tagName, color } = event.detail || {};
-        if (tagName && color) {
-          setTagColorMap(prev => ({
-            ...prev,
-            [tagName]: color
-          }));
+        try {
+          const savedColors = JSON.parse(localStorage.getItem('tagColors') || '{}');
+          savedColors[tagName] = color;
+          localStorage.setItem('tagColors', JSON.stringify(savedColors));
+        } catch (e) {
+          // ignore
         }
       }
     };
@@ -126,17 +131,12 @@ const Header = ({ onSearch, searchQuery = '', selectedTag, onTagChange, onOpenRe
   const getTagColorFromState = (tagName) => {
     const colorValue = tagColorMap[tagName];
     
-    // 如果没有颜色映射，返回默认样式
-    if (!colorValue) {
-      return 'text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-600';
-    }
-    
-    // 如果是自定义颜色（十六进制），返回基础类，样式通过内联样式设置
-    if (colorValue.startsWith('#')) {
+    // 有颜色映射时返回白色文字
+    if (colorValue) {
       return 'text-white border border-gray-300 dark:border-gray-600';
     }
     
-    // 预设颜色，返回基础类
+    // 没有颜色映射，返回默认蓝色背景的白色文字
     return 'text-white border border-gray-300 dark:border-gray-600';
   };
 
@@ -144,16 +144,8 @@ const Header = ({ onSearch, searchQuery = '', selectedTag, onTagChange, onOpenRe
   const getTagStyleFromState = (tagName) => {
     const colorValue = tagColorMap[tagName];
     
-    // 如果没有颜色映射，返回默认背景色
-    if (!colorValue) {
-      return {
-        backgroundColor: 'var(--theme-elevated)',
-        color: 'var(--theme-text)'
-      };
-    }
-    
     // 如果是十六进制颜色值，直接使用
-    if (colorValue.startsWith('#')) {
+    if (colorValue && colorValue.startsWith('#')) {
       return {
         backgroundColor: colorValue,
         color: '#ffffff'
@@ -161,8 +153,16 @@ const Header = ({ onSearch, searchQuery = '', selectedTag, onTagChange, onOpenRe
     }
     
     // 预设颜色，直接使用十六进制值
+    if (colorValue) {
+      return {
+        backgroundColor: colorValue,
+        color: '#ffffff'
+      };
+    }
+    
+    // 没有颜色映射，使用默认灰色（与TagManager一致）
     return {
-      backgroundColor: colorValue,
+      backgroundColor: '#9CA3AF',
       color: '#ffffff'
     };
   };

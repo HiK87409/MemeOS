@@ -14,8 +14,15 @@ const TagPicker = ({
   cardSettings
 }) => {
   const [availableTags, setAvailableTags] = useState([]); // 完整标签对象数组，包含层级信息
-  const [isLoading, setIsLoading] = useState(false);
-  const [tagColorMap, setTagColorMap] = useState({});
+  const [isLoading, setIsLoading] = useState(false); // 保留用于初始加载，loadTags中不再切换以避免闪烁
+  const [tagColorMap, setTagColorMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tagColors');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [favoriteTags, setFavoriteTags] = useState([]);
   const [expandedGroups, setExpandedGroups] = useState(new Set()); // 标签组展开状态
   
@@ -90,7 +97,6 @@ const TagPicker = ({
 
   // 加载标签数据
   const loadTags = async () => {
-    setIsLoading(true);
     try {
       const tags = localConfigManager.getTags();
       const tagColors = localConfigManager.getTagColors();
@@ -102,8 +108,6 @@ const TagPicker = ({
     } catch (error) {
       console.error('加载标签失败:', error);
       setAvailableTags([]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -436,12 +440,13 @@ const TagPicker = ({
       console.log('🎯 handleTagsUpdated 被调用:', { action, isOpen });
       
       // 当标签发生变化时，重新加载数据
-      // 但排除备选区的添加/移除操作，避免不必要的重载导致闪烁
-      if (isOpen && !['add_to_available', 'remove_from_available'].includes(action)) {
+      // 但排除备选区的添加/移除操作和创建操作，避免不必要的重载导致闪烁
+      // createTag 已在函数内更新了 availableTags，无需再次 loadTags
+      if (isOpen && !['add_to_available', 'remove_from_available', 'create'].includes(action)) {
         console.log('🎯 执行 loadTags()');
         loadTags();
       } else {
-        console.log('🎯 跳过 loadTags() - 备选区操作或组件未打开');
+        console.log('🎯 跳过 loadTags() - 已在操作内更新状态或组件未打开');
       }
     };
 
@@ -495,7 +500,7 @@ const TagPicker = ({
 
 
   // 创建新标签
-  const createTag = async () => {
+  const createTag = () => {
     // 根据当前模式获取要创建的标签名称
     const trimmedValue = isSearchMode ? searchTerm.trim() : inputValue.trim();
     if (!trimmedValue) return;
@@ -503,97 +508,75 @@ const TagPicker = ({
     // 检查标签是否已存在
     const tagExists = availableTags.some(tag => tag.name === trimmedValue);
     
-    try {
-      if (!tagExists) {
-        // 使用localConfigManager创建新标签
-        const newTag = await localConfigManager.addTag({
-          name: trimmedValue,
-          isPinned: false,
-          children: []
-        });
+    // 立即更新UI状态 - 先更新已选标签，让用户看到即时反馈
+    if (!selectedTags.includes(trimmedValue)) {
+      const newSelectedTags = [...selectedTags, trimmedValue];
+      onTagsChange(newSelectedTags);
+    }
+    
+    // 立即清空输入框
+    if (isSearchMode) {
+      setSearchTerm('');
+    } else {
+      setInputValue('');
+    }
+    
+    // 后台异步完成创建和数据同步，不阻塞UI
+    (async () => {
+      try {
+        if (!tagExists) {
+          // 使用localConfigManager创建新标签
+          const newTag = await localConfigManager.addTag({
+            name: trimmedValue,
+            isPinned: false,
+            children: []
+          });
+          
+          if (newTag) {
+            // 设置标签颜色
+            let colorToSet = selectedColor;
+            if (!selectedColor.startsWith('#')) {
+              const colorObj = commonColors.find(c => c.value === selectedColor);
+              colorToSet = colorObj ? colorObj.hexColor : '#3B82F6';
+            }
+            await localConfigManager.setTagColor(trimmedValue, colorToSet);
+          }
+        }
         
-        if (newTag) {
-          // 设置标签颜色 - 确保使用有效的十六进制颜色值
-        let colorToSet = selectedColor;
+        // 更新可用标签列表和颜色映射
+        const refreshedTags = localConfigManager.getTags();
+        setAvailableTags(refreshedTags);
         
-        // 如果selectedColor是预设颜色名称，查找对应的十六进制值
+        let colorToSave = selectedColor;
         if (!selectedColor.startsWith('#')) {
           const colorObj = commonColors.find(c => c.value === selectedColor);
-          colorToSet = colorObj ? colorObj.hexColor : '#3B82F6';
+          colorToSave = colorObj ? colorObj.hexColor : '#3B82F6';
         }
         
-        await localConfigManager.setTagColor(trimmedValue, colorToSet);
-          console.log('🎯 TagPicker通过localConfigManager创建标签:', trimmedValue);
+        setTagColorMap(prev => ({ ...prev, [trimmedValue]: colorToSave }));
+        
+        // 更新本地存储
+        try {
+          const savedColors = JSON.parse(localStorage.getItem('tagColors') || '{}');
+          savedColors[trimmedValue] = colorToSave;
+          localStorage.setItem('tagColors', JSON.stringify(savedColors));
+        } catch (e) {
+          // ignore
         }
-      }
-      
-      // 立即更新本地状态 - 重新从 localConfigManager 获取完整标签数据
-      const refreshedTags = localConfigManager.getTags();
-      setAvailableTags(refreshedTags);
-      
-      // 立即更新标签颜色映射 - 确保使用有效的十六进制颜色值
-      let colorToSave = selectedColor;
-      
-      // 如果selectedColor是预设颜色名称，查找对应的十六进制值
-      if (!selectedColor.startsWith('#')) {
-        const colorObj = commonColors.find(c => c.value === selectedColor);
-        colorToSave = colorObj ? colorObj.hexColor : '#3B82F6';
-      }
-      
-      const newTagColorMap = {
-        ...tagColorMap,
-        [trimmedValue]: colorToSave
-      };
-      setTagColorMap(newTagColorMap);
-      
-      // 更新本地存储
-      try {
-        const savedColors = JSON.parse(localStorage.getItem('tagColors') || '{}');
-        savedColors[trimmedValue] = colorToSave;
-        localStorage.setItem('tagColors', JSON.stringify(savedColors));
-        console.log('🎨 TagPicker保存颜色到localStorage:', { tagName: trimmedValue, color: colorToSave });
+        
+        // 触发事件通知其他组件（TagPicker自身的监听器已通过exclude列表跳过）
+        window.dispatchEvent(new CustomEvent('tagColorsUpdated', {
+          detail: { tagName: trimmedValue, color: colorToSave }
+        }));
+        window.dispatchEvent(new CustomEvent('tagsUpdated', {
+          detail: { action: 'create', tagName: trimmedValue, tags: refreshedTags }
+        }));
+        
       } catch (error) {
-        console.error('更新本地存储失败:', error);
+        console.error('创建标签失败:', error);
+        loadTags();
       }
-      
-      // 触发UI更新事件
-      window.dispatchEvent(new CustomEvent('tagColorsUpdated', {
-        detail: { tagName: trimmedValue, color: colorToSave }
-      }));
-      
-      // 触发标签列表更新事件
-      window.dispatchEvent(new CustomEvent('tagsUpdated', {
-        detail: { action: 'create', tagName: trimmedValue, tags: updatedTags }
-      }));
-      
-
-      
-      // 不再自动将新创建的标签添加到收藏列表中
-      
-      // 自动将新创建的标签添加到已选列表中
-      if (!selectedTags.includes(trimmedValue)) {
-        const newSelectedTags = [...selectedTags, trimmedValue];
-        onTagsChange(newSelectedTags);
-      }
-      
-      // 根据当前模式清空相应的输入框并关闭下拉框
-      if (isSearchMode) {
-        setSearchTerm('');
-        setIsSearchMode(false);
-        setShowSearchDropdown(false);
-      } else {
-        setInputValue('');
-      }
-      
-      // 使用localConfigManager创建标签（已在前面完成，这里不需要额外操作）
-      
-      // 使用localConfigManager更新标签颜色（已在前面完成，这里不需要额外操作）
-      
-    } catch (error) {
-      console.error('创建标签失败:', error);
-      // 如果创建失败，重新加载数据
-      loadTags();
-    }
+    })();
   };
 
   // 处理键盘事件
@@ -605,15 +588,8 @@ const TagPicker = ({
         // 搜索模式下的逻辑
         if (filteredTags.length === 0) {
           // 没有匹配的标签，创建新标签
-          // 将搜索词作为新标签名称
-          setInputValue(searchTerm);
-          setIsSearchMode(false);
-          setSearchTerm('');
-          setShowSearchDropdown(false);
-          // 延迟执行创建，确保状态更新完成
-          setTimeout(() => {
-            createTag();
-          }, 10);
+          // 直接创建，createTag 内部会处理状态更新
+          createTag();
         } else if (filteredTags.length === 1) {
           // 只有一个匹配的标签，自动选择
           const singleTag = filteredTags[0];
@@ -630,10 +606,8 @@ const TagPicker = ({
             }));
           }
           
-          // 清空搜索并退出搜索模式
+          // 清空搜索，保持搜索模式打开
           setSearchTerm('');
-          setIsSearchMode(false);
-          setShowSearchDropdown(false);
         }
         // 如果有多个匹配标签，不自动选择，让用户手动选择
       } else {
@@ -1484,10 +1458,8 @@ const TagPicker = ({
                   e.stopPropagation();
                   e.nativeEvent && e.nativeEvent.stopImmediatePropagation && e.nativeEvent.stopImmediatePropagation();
                   createTag();
-                  // 创建后关闭下拉框
-                  setShowSearchDropdown(false);
-                  setIsSearchMode(false);
-                  setSearchTerm('');
+                  // 创建后不关闭标签选择器，保持编辑状态
+                  // 只清空搜索词，让新标签在已选区域可见
                   return false;
                 }}
                 disabled={!(isSearchMode ? searchTerm.trim() : inputValue.trim())}

@@ -72,7 +72,14 @@ const NoteEditor = ({
   const [failedUploadFile, setFailedUploadFile] = useState(null); // 保存上传失败的文件用于重试
 
   const allColors = [...commonColors];
-  const [tagColorMap, setTagColorMap] = useState({});
+  const [tagColorMap, setTagColorMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tagColors');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [colorDataLoaded, setColorDataLoaded] = useState(false);
 
   const fileInputRef = useRef(null);
@@ -231,9 +238,19 @@ const NoteEditor = ({
     return moodWeatherConfig.parseContentForMoodAndWeather(content);
   };
 
-  // 监听note属性变化，更新编辑器内容
+  // 使用ref追踪note的id，只在note id变化时重置编辑器状态
+  // 避免同一个note的对象引用变化（如父组件状态更新）导致标签等本地编辑状态被覆盖
+  const prevNoteIdRef = useRef(null);
+  
   useEffect(() => {
     if (note) {
+      // 只在note id变化时才重置编辑器状态（如切换编辑不同的笔记）
+      // 同一个note的属性更新不应覆盖用户正在编辑的本地状态
+      if (prevNoteIdRef.current === note.id) {
+        return;
+      }
+      prevNoteIdRef.current = note.id;
+      
       const noteContent = note.content || '';
       setContent(noteContent);
       
@@ -243,17 +260,15 @@ const NoteEditor = ({
       setCurrentWeather(weather);
       
       // 处理标签数据
+      let noteTagNames = [];
       if (Array.isArray(note.tags) && note.tags.length > 0) {
         if (typeof note.tags[0] === 'string') {
-          setSelectedTags(note.tags);
+          noteTagNames = note.tags;
         } else if (note.tags[0] && note.tags[0].name) {
-          setSelectedTags(note.tags.map(tag => tag.name));
-        } else {
-          setSelectedTags([]);
+          noteTagNames = note.tags.map(tag => tag.name);
         }
-      } else {
-        setSelectedTags([]);
       }
+      setSelectedTags(noteTagNames);
       
       // 处理日期
       if (note.created_at) {
@@ -458,10 +473,10 @@ const NoteEditor = ({
     
 
     
-    // 如果没有颜色映射，使用默认颜色
+    // 如果没有颜色映射，使用默认灰色（与TagManager一致）
     if (!colorValue) {
         return {
-        backgroundColor: '#3B82F6', // 默认天蓝色
+        backgroundColor: '#9CA3AF',
         color: '#ffffff'
       };
     }
@@ -527,7 +542,7 @@ const NoteEditor = ({
           console.log('[双向链接] 开始处理双向链接，笔记ID:', result.id);
           console.log('[双向链接] 笔记内容:', content);
           
-          // 处理双向链接关系（基于HTTP链接）
+          // 处理双向链接关系（基于 [[wiki-link]] 语法）
           const bidirectionalResult = await processBidirectionalLinks(result.id, content);
           
           console.log('[双向链接] 双向链接处理完成:', bidirectionalResult);
@@ -663,44 +678,16 @@ const NoteEditor = ({
     setContent(newContent);
   };
 
-  // 处理笔记引用选择
+  // 处理笔记引用选择 - 使用 [[noteId|noteTitle]] wiki-link 格式
   const handleNoteReference = async (selectedNote) => {
-    console.log('🔗 选择的笔记:', selectedNote);
-    console.log('🔗 笔记内容:', selectedNote.content);
-    
     const noteTitle = getNoteTitle(selectedNote.content);
-    console.log('🔗 提取的标题:', noteTitle);
+    // 使用 wiki-link 格式：[[noteId|displayText]]
+    const referenceText = `[[${selectedNote.id}|${noteTitle}]]`;
     
-    // 创建纯HTTP引用链接
-    const currentHost = window.location.hostname || 'localhost';
-    const currentPort = window.location.port || '3000';
-    const protocol = window.location.protocol || 'http:';
-    let referenceText = `> [${noteTitle}](${protocol}//${currentHost}:${currentPort}/note/${selectedNote.id})`;
-    console.log('🔗 HTTP引用文本:', referenceText);
-    
-    // 插入引用文本到内容中
     const textarea = textareaRef.current;
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      
-      // 检测引用符号前面是否需要添加回车
-      const beforeCursor = content.substring(0, start);
-      const afterCursor = content.substring(end);
-      const needsNewlineBefore = beforeCursor.length > 0 && !beforeCursor.endsWith('\n');
-      const needsNewlineAfter = afterCursor.length > 0 && !afterCursor.startsWith('\n');
-      
-      // 在引用前添加回车（如果需要）
-      if (needsNewlineBefore) {
-        referenceText = '\n' + referenceText;
-        console.log('🔗 添加前置回车后的引用文本:', referenceText);
-      }
-      
-      // 在引用后添加回车（如果需要）
-      if (needsNewlineAfter) {
-        referenceText = referenceText + '\n';
-        console.log('🔗 添加后置回车后的引用文本:', referenceText);
-      }
       
       const newContent = content.substring(0, start) + referenceText + content.substring(end);
       setContent(newContent);
@@ -711,17 +698,13 @@ const NoteEditor = ({
         textarea.setSelectionRange(start + referenceText.length, start + referenceText.length);
       }, 0);
     } else {
-      setContent(prev => prev + '\n' + referenceText + '\n');
+      setContent(prev => prev + referenceText);
     }
     
     // 引用已插入，立即处理双向链接
     if (isEditMode && note) {
       try {
-        console.log('[双向链接] 在插入引用后立即处理双向链接，笔记ID:', note.id);
-        const bidirectionalResult = await processBidirectionalLinks(note.id, newContent || content);
-        console.log('[双向链接] 插入引用后双向链接处理完成:', bidirectionalResult);
-        
-        // 触发引用数据更新
+        const bidirectionalResult = await processBidirectionalLinks(note.id, content + referenceText);
         if (bidirectionalResult.success) {
           const { default: globalEvents, GLOBAL_EVENTS } = await import('../utils/globalEvents');
           globalEvents.emit(GLOBAL_EVENTS.NOTE_REFERENCES_UPDATED, { noteId: note.id });
@@ -735,9 +718,11 @@ const NoteEditor = ({
     setShowReferenceSelector(false);
   };
 
-  // 获取笔记标题的辅助函数
+  // 获取笔记标题的辅助函数（排除心情和天气标记）
   const getNoteTitle = (content) => {
-    const lines = content.split('\n');
+    // 先移除心情和天气标记
+    const cleanContent = moodWeatherConfig.removeAllMoodAndWeather(content);
+    const lines = cleanContent.split('\n');
     const firstLine = lines[0]?.trim();
     
     // 如果第一行是标题格式
@@ -794,58 +779,13 @@ const NoteEditor = ({
   };
 
   // 处理TagPicker标签选择
-  const handleTagPickerSelect = async (tags) => {
-    console.log('📝 NoteEditor接收到标签选择:', tags);
-    
+  const handleTagPickerSelect = (tags) => {
     // 确保selectedTags始终保持字符串数组格式
     const tagNames = tags.map(tag => typeof tag === 'string' ? tag : tag.name);
-    console.log('📝 NoteEditor标准化后的标签:', tagNames);
     
-    // 更新本地状态
+    // 只更新本地状态，与创建模式行为一致，不触发自动保存
+    // 保存将在用户点击保存按钮时统一执行
     setSelectedTags(tagNames);
-    
-    // 如果是编辑模式，自动保存但不退出编辑模式
-    if (isEditMode && note) {
-      try {
-        console.log('💾 NoteEditor自动保存标签更改...');
-        
-        // 确保标签数据已经同步到localConfigManager
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // 验证标签是否存在于localConfigManager中
-        try {
-          const allTags = await localConfigManager.getTags();
-          const flatTags = flattenTags(allTags);
-          const missingTags = tagNames.filter(tag => 
-            !flatTags.some(existingTag => existingTag.name === tag)
-          );
-          
-          if (missingTags.length > 0) {
-            console.warn('⚠️ 发现缺失的标签:', missingTags);
-            // 等待更长时间确保数据同步
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        } catch (verifyError) {
-          console.warn('验证标签存在性失败:', verifyError);
-        }
-        
-        // 调用保存函数（使用已经标准化的tagNames），但传递一个标记表明这是标签更改
-        await onSubmit({
-          content: content,
-          tags: tagNames,
-          created_at: selectedDate.toISOString(),
-          isTagChange: true // 添加标记表明这是标签更改
-        });
-        
-        console.log('✅ NoteEditor标签更改已保存');
-      } catch (error) {
-        console.error('❌ NoteEditor保存标签更改失败:', error);
-        // 即使保存失败，也保持UI状态的一致性
-      }
-    }
-    
-    // 不自动关闭标签选择器，保持常驻状态
-    // setShowTagPicker(false);
   };
 
 

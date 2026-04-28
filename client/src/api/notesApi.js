@@ -654,10 +654,9 @@ export const fetchNoteHistory = async (noteId) => {
 
 // ===== 双向链接相关 API =====
 
-// 处理双向链接（基于HTTP链接）
+// 处理双向链接（基于 [[wiki-link]] 语法）
 export const processBidirectionalLinks = async (noteId, content) => {
   try {
-    // 在线模式：调用API处理双向链接
     const response = await api.post('/notes/bidirectional-links', {
       noteId,
       content
@@ -669,7 +668,7 @@ export const processBidirectionalLinks = async (noteId, content) => {
   }
 };
 
-// 获取笔记的引用关系（基于HTTP链接）
+// 获取笔记的引用关系
 export const fetchNoteReferences = async (noteId) => {
   try {
     // 在线模式：调用API获取笔记引用关系

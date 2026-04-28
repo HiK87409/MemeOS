@@ -125,7 +125,14 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
   // 基础状态
   const [allTags, setAllTags] = useState([]);
   const [availableColors, setAvailableColors] = useState([]);
-  const [tagColorMap, setTagColorMap] = useState({});
+  const [tagColorMap, setTagColorMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tagColors');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [colorDataLoaded, setColorDataLoaded] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -192,7 +199,7 @@ const TagManager = ({ onTagsChange, onDateChange, selectedDate, noteDates, class
   };
 
   // 级联菜单状态
-  const [activeSubmenu, setActiveSubmenu] = useState(null); // 'addChild' | 'moveUnder' | null
+  const [activeSubmenu, setActiveSubmenu] = useState(null); // 'addChild' | 'moveUnder' | 'setColor' | null
   const [submenuTargetTag, setSubmenuTargetTag] = useState(null); // 当前右键菜单的目标标签
   const [submenuPos, setSubmenuPos] = useState({ top: 0, left: 0, goLeft: false }); // 子菜单portal位置
   const submenuTimeoutRef = useRef(null); // 防止鼠标移动时闪烁
@@ -2025,24 +2032,40 @@ useEffect(() => {
             
             <div className="border-0 my-1"></div>
             
-            {/* 设置颜色 */}
-            <button
-              ref={colorEditorButtonRef}
-              onClick={() => handleMenuAction('setColor', tag)}
-              className="w-full text-left px-3 py-2 text-sm flex items-center border-0 transition-colors"
-              style={{
-                backgroundColor: 'transparent',
-                color: 'var(--theme-text)'
+            {/* 设置颜色 - 级联菜单触发器 */}
+            <div
+              className="relative"
+              onMouseEnter={(e) => {
+                clearTimeout(submenuTimeoutRef.current);
+                const rect = e.currentTarget.getBoundingClientRect();
+                const goLeft = rect.right + 170 > window.innerWidth;
+                setSubmenuPos({ top: rect.top, left: goLeft ? rect.left - 170 : rect.right, goLeft });
+                setActiveSubmenu('setColor');
+                setSubmenuTargetTag(tag);
               }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--theme-surface)'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+              onMouseLeave={() => {
+                submenuTimeoutRef.current = setTimeout(() => {
+                  setActiveSubmenu(null);
+                }, 150);
+              }}
             >
-              <div className="mr-2 w-4 h-4 rounded-full" style={{ 
-                backgroundColor: tagColorMap[tag.name] || '#9CA3AF',
-                borderColor: 'var(--theme-border)'
-              }} />
-              设置颜色
-            </button>
+              <div
+                className="w-full text-left px-3 py-2 text-sm flex items-center justify-between border-0 transition-colors cursor-pointer"
+                style={{
+                  backgroundColor: activeSubmenu === 'setColor' && submenuTargetTag?.id === tag.id ? 'var(--theme-surface)' : 'transparent',
+                  color: 'var(--theme-text)'
+                }}
+              >
+                <div className="flex items-center">
+                  <div className="mr-2 w-4 h-4 rounded-full" style={{ 
+                    backgroundColor: tagColorMap[tag.name] || '#9CA3AF',
+                    borderColor: 'var(--theme-border)'
+                  }} />
+                  <span>设置颜色</span>
+                </div>
+                <FiChevronRight size={12} className="ml-1 opacity-50" style={submenuPos.goLeft ? { transform: 'rotate(180deg)' } : undefined} />
+              </div>
+            </div>
             
             <div className="border-0 my-1"></div>
             
@@ -2204,180 +2227,7 @@ useEffect(() => {
             placeholder="搜索标签..."
             className="w-full px-2 py-1 pr-16 border border-gray-300 dark:border-gray-600 rounded-lg text-xs focus:ring-0" style={{ backgroundColor: 'var(--theme-background)' }}
           />
-          {/* 添加标签按钮 */}
-          <button
-            onClick={async (e) => {
-              e.stopPropagation();
-              if (searchTerm.trim()) {
-                const tagName = searchTerm.trim();
-                try {
-                  // 检查标签是否已存在
-                  const normalizedTagName = tagName.toLowerCase();
-                  const existingTag = allTags.find(tag => {
-                    const tagIdentifier = (tag.name || tag.label || tag.title || tag.id || '').toLowerCase();
-                    return tagIdentifier === normalizedTagName;
-                  });
-                  
-                  if (existingTag) {
-                    console.log('标签已存在，不允许重复创建:', tagName);
-                    return;
-                  }
-                  
-                  // 使用本地配置管理器添加标签
-                  const newTag = await localConfigManager.addTag({
-                    name: tagName,
-                    isPinned: false,
-                    children: []
-                  });
-                  
-                  if (newTag) {
-                    // 使用用户选择的颜色设置标签颜色
-                    await localConfigManager.setTagColor(tagName, selectedColor);
-                    
-                    // 立即更新本地颜色映射，确保UI立即显示新颜色
-                    setTagColorMap(prev => ({
-                      ...prev,
-                      [tagName]: selectedColor
-                    }));
-                    
-                    console.log('通过+号按钮添加标签成功:', tagName, '颜色:', selectedColor, 'ID:', newTag.id);
-                    
-                    // 触发标签更新事件，通知其他组件刷新
-                    window.dispatchEvent(new CustomEvent('tagsUpdated', {
-                      detail: {
-                        action: 'add',
-                        tag: newTag,
-                        tagName: tagName
-                      }
-                    }));
-                    
-                    // 手动刷新标签列表，确保立即显示新标签
-                    const currentTags = localConfigManager.getTags();
-                    
-                    // 获取收藏状态
-                    let favoriteTags = [];
-                    try {
-                      const savedFavorites = localStorage.getItem('memeos_favorite_tags');
-                      if (savedFavorites) {
-                        favoriteTags = JSON.parse(savedFavorites);
-                      }
-                    } catch (error) {
-                      console.error('获取收藏状态失败:', error);
-                    }
-                    
-                    const tagsWithFavorites = currentTags.map(tag => ({
-                      ...tag,
-                      isFavorite: favoriteTags.includes(tag.name || tag.label || tag.title || tag.id || 'unknown')
-                    }));
-                    setAllTags(tagsWithFavorites);
-                    
-                    setSearchTerm(''); // 清空搜索框
-                  } else {
-                    console.error('通过+号按钮添加标签失败');
-                  }
-                } catch (error) {
-                  console.error('通过+号按钮添加标签过程中发生错误:', error);
-                }
-              }
-            }}
-            className="absolute right-10 top-1/2 transform -translate-y-1/2 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-            title="添加标签"
-          >
-            <FiPlus className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-          </button>
-          
-          {/* 颜色选择器按钮 - 只在添加新标签时显示 */}
-          {!colorEditingTag && (
-            <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-              <button
-                ref={colorPickerButtonRef}
-                onClick={() => setShowColorPicker(!showColorPicker)}
-                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                title="选择标签颜色"
-              >
-                <div 
-                  className="w-5 h-5 rounded-full border border-gray-300 dark:border-gray-600"
-                  style={{ backgroundColor: selectedColor }}
-                />
-              </button>
-              
-              {/* 颜色选择器弹窗 - 使用PortalPopup */}
-              <PortalPopup
-                isOpen={showColorPicker}
-                triggerRef={colorPickerButtonRef}
-                onClose={() => setShowColorPicker(false)}
-                className="min-w-[200px] max-w-[400px]"
-              >
-                <div className="rounded-lg shadow-lg p-3 w-full" style={{ backgroundColor: '#171717' }}>
-                  {/* 预设颜色网格 */}
-                  <div className="grid grid-cols-6 gap-2 mb-4">
-                    {commonColors.map((color) => (
-                      <button
-                        key={color.value}
-                        onClick={async () => {
-                          setSelectedColor(color.hexColor);
-                          
-                          // 如果正在编辑标签颜色，更新标签颜色
-                          if (colorEditingTag) {
-                            await updateTagColor(colorEditingTag.name, color.hexColor);
-                            setColorEditingTag(null);
-                          }
-                          
-                          setShowColorPicker(false);
-                          console.log('已选择颜色:', color.hexColor);
-                        }}
-                        className="w-6 h-6 rounded-full border border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
-                        style={{ backgroundColor: color.hexColor }}
-                        title={color.name}
-                      />
-                    ))}
-                  </div>
-                  
-                  {/* 自定义颜色选择器 */}
-                  <div className="pt-3">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      自定义颜色
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        value={selectedColor}
-                        onChange={async (e) => {
-                          const color = e.target.value;
-                          setSelectedColor(color);
-                          
-                          // 如果正在编辑标签颜色，更新标签颜色
-                          if (colorEditingTag) {
-                            await updateTagColor(colorEditingTag.name, color);
-                          }
-                        }}
-                        className="w-10 h-8 border border-gray-300 dark:border-gray-600 rounded cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={selectedColor}
-                        onChange={async (e) => {
-                          const value = e.target.value;
-                          // 验证是否为有效的十六进制颜色值
-                          const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-                          if (hexColorRegex.test(value) || value === '') {
-                            setSelectedColor(value);
-                            
-                            // 如果正在编辑标签颜色且颜色值有效，更新标签颜色
-                            if (colorEditingTag && hexColorRegex.test(value)) {
-                              await updateTagColor(colorEditingTag.name, value);
-                            }
-                          }
-                        }}
-                        placeholder="#000000"
-                        className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm focus:ring-0"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </PortalPopup>
-            </div>
-          )}
+
 
         </div>
         
@@ -2386,108 +2236,6 @@ useEffect(() => {
       
       {/* 标签树展示区域 - 可滚动 */}
       <div className="flex-1 min-h-0 mb-4 relative">
-        
-        {/* 标签颜色选择器 - 用于编辑现有标签颜色（全屏弹窗） */}
-        {colorEditingTag && (
-          <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-light-bg dark:bg-dark-surface rounded-lg p-6 shadow-xl max-w-md w-full mx-4">
-              <div className="text-center mb-6">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-light-elevated dark:bg-dark-elevated mb-4">
-                  <FiEdit2 className="h-6 w-6 text-light-text dark:text-dark-text" />
-                </div>
-                <h3 className="text-lg font-medium text-light-text dark:text-dark-text mb-2">
-                  设置标签颜色
-                </h3>
-                <p className="text-sm text-light-muted dark:text-dark-muted">
-                  {colorEditingTag.name}
-                </p>
-              </div>
-              
-              <div className="mb-6">
-                {/* 预设颜色网格 */}
-                <div className="grid grid-cols-8 gap-3 mb-6">
-                  {commonColors.map((color) => (
-                    <button
-                      key={color.value}
-                      onClick={async () => {
-                        setSelectedColor(color.hexColor);
-                        await updateTagColor(colorEditingTag.name, color.hexColor);
-                        setColorEditingTag(null);
-                        setShowColorPicker(false);
-                        console.log('标签颜色已更新:', colorEditingTag.name, '->', color.hexColor);
-                      }}
-                      className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 hover:scale-110 transition-transform"
-                      style={{ backgroundColor: color.hexColor }}
-                      title={color.name}
-                    />
-                  ))}
-                </div>
-                
-                {/* 自定义颜色选择器 */}
-                <div>
-                  <label className="block text-sm font-medium text-light-text dark:text-dark-text mb-3">
-                    自定义颜色
-                  </label>
-                  <div className="flex gap-3">
-                    <input
-                      type="color"
-                      value={selectedColor}
-                      onChange={async (e) => {
-                        const color = e.target.value;
-                        setSelectedColor(color);
-                        await updateTagColor(colorEditingTag.name, color);
-                      }}
-                      className="w-12 h-10 border border-gray-300 dark:border-gray-600 rounded cursor-pointer"
-                    />
-                    <input
-                      type="text"
-                      value={selectedColor}
-                      onChange={async (e) => {
-                        const value = e.target.value;
-                        // 验证是否为有效的十六进制颜色值
-                        const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-                        if (hexColorRegex.test(value) || value === '') {
-                          setSelectedColor(value);
-                          
-                          // 如果颜色值有效，更新标签颜色
-                          if (hexColorRegex.test(value)) {
-                            await updateTagColor(colorEditingTag.name, value);
-                          }
-                        }
-                      }}
-                      placeholder="#000000"
-                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm focus:ring-0"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={() => {
-                    setColorEditingTag(null);
-                    setShowColorPicker(false);
-                  }}
-                  className="px-4 py-2 bg-light-elevated dark:bg-dark-elevated hover:bg-light-border dark:hover:bg-dark-border text-light-text dark:text-dark-text rounded-md transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={async () => {
-                    if (selectedColor) {
-                      await updateTagColor(colorEditingTag.name, selectedColor);
-                      setColorEditingTag(null);
-                      setShowColorPicker(false);
-                    }
-                  }}
-                className="px-4 py-2 bg-light-bg dark:bg-dark-bg hover:bg-light-border dark:hover:bg-dark-border text-light-text dark:text-dark-text rounded-md transition-colors"
-                >
-                  确认
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         <div className="h-full overflow-y-auto hide-scrollbar smooth-scroll-container scrollbar-smooth scrollbar-hide" ref={scrollContainerRef}>
           <DndContext
             sensors={sensors}
@@ -2699,6 +2447,28 @@ useEffect(() => {
                 <span className="truncate">{targetTag.name}</span>
               </button>
             ));
+          })()}
+          {activeSubmenu === 'setColor' && (() => {
+            return (
+              <div className="p-2" style={{ width: '170px' }}>
+                <div className="grid grid-cols-5 gap-1.5 mb-2">
+                  {commonColors.map((color) => (
+                    <button
+                      key={color.value}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await updateTagColor(submenuTargetTag.name, color.hexColor);
+                        setActiveSubmenu(null);
+                        setMenuVisible(null);
+                      }}
+                      className="w-6 h-6 rounded-full border border-gray-300 dark:border-gray-600 hover:scale-125 transition-transform"
+                      style={{ backgroundColor: color.hexColor }}
+                      title={color.name}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
           })()}
         </div>,
         document.body

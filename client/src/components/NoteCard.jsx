@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { FiEdit2, FiTrash2, FiCalendar, FiTag, FiMoreVertical, FiStar, FiSettings, FiLink, FiArrowLeft, FiArrowRight, FiHeart, FiClock, FiEye, FiEyeOff } from 'react-icons/fi';
 
 import { useEdit } from '../contexts/EditContext';
@@ -34,6 +35,7 @@ import { moodWeatherConfig } from '../config/moodWeatherConfig';
 import EnhancedBackupManager from '../utils/enhancedbackupmanager';
 
 const NoteCard = ({ note, onEdit, onDelete, onPin, onFavorite, onNoteClick, notes = [] }) => {
+  const navigate = useNavigate();
   // 使用共享的常用配色
   const allColors = [...commonColors];
   const [isExpanded, setIsExpanded] = useState(false);
@@ -47,7 +49,14 @@ const NoteCard = ({ note, onEdit, onDelete, onPin, onFavorite, onNoteClick, note
   };
   
   // 如果有图片，默认展开 - 这个逻辑将在函数定义后处理
-  const [tagColorMap, setTagColorMap] = useState({});
+  const [tagColorMap, setTagColorMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tagColors');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [showMenu, setShowMenu] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [showFullDate, setShowFullDate] = useState(false);
@@ -164,19 +173,17 @@ const NoteCard = ({ note, onEdit, onDelete, onPin, onFavorite, onNoteClick, note
     setShowMenu(!showMenu);
   };
 
-  // 处理直接进入编辑模式（无动画）
+  // 处理进入编辑模式 - 跳转到独立编辑页面
   const handleEditDirect = () => {
-    startEditing(note.id);
+    navigate(`/edit/${note.id}`, { state: { note } });
   };
 
-  // 处理双击编辑
+  // 处理双击编辑 - 跳转到独立编辑页面
   const handleDoubleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isEditing) {
-      clearTimeout(doubleClickTimeoutRef.current);
-      handleEditDirect();
-    }
+    // 跳转到独立编辑页面，与 /edit 页面体验一致，避免内联编辑闪烁问题
+    navigate(`/edit/${note.id}`, { state: { note } });
   };
 
   // 处理单击
@@ -314,20 +321,22 @@ const NoteCard = ({ note, onEdit, onDelete, onPin, onFavorite, onNoteClick, note
   // 监听标签颜色更新事件
   useEffect(() => {
     const handleTagColorsUpdated = async (event) => {
-      try {
-        const { fetchTagColors } = await import('../api/notesApi.js');
-        const updatedTagColors = await fetchTagColors();
+      const { tagName, color } = event.detail || {};
+      
+      // 优先使用事件携带的新颜色数据直接更新本地状态，避免从服务器获取旧数据导致颜色闪回默认值
+      if (tagName && color) {
+        setTagColorMap(prev => ({
+          ...prev,
+          [tagName]: color
+        }));
         
-        setTagColorMap(updatedTagColors);
-        localStorage.setItem('tagColors', JSON.stringify(updatedTagColors));
-      } catch (error) {
-        console.error('同步标签颜色失败:', error);
-        const { tagName, color } = event.detail || {};
-        if (tagName && color) {
-          setTagColorMap(prev => ({
-            ...prev,
-            [tagName]: color
-          }));
+        // 同步更新localStorage
+        try {
+          const savedColors = JSON.parse(localStorage.getItem('tagColors') || '{}');
+          savedColors[tagName] = color;
+          localStorage.setItem('tagColors', JSON.stringify(savedColors));
+        } catch (e) {
+          // ignore
         }
       }
     };
@@ -389,7 +398,7 @@ const NoteCard = ({ note, onEdit, onDelete, onPin, onFavorite, onNoteClick, note
     }
   }, [note.id, isInitialized, darkMode]);
 
-  // 加载引用关系数据
+  // 加载引用关系数据 - 使用 WebSocket 事件驱动，不再轮询
   useEffect(() => {
     const loadReferences = async () => {
       if (!note?.id) return;
@@ -406,16 +415,14 @@ const NoteCard = ({ note, onEdit, onDelete, onPin, onFavorite, onNoteClick, note
       }
     };
 
+    // 初始加载一次
     loadReferences();
-    
-    // 添加轮询机制，每30秒更新一次引用数据
-    const pollInterval = setInterval(loadReferences, 30000);
     
     // 监听全局事件，当引用关系更新时重新加载数据
     const handleReferencesUpdated = (eventData) => {
-      const { noteId } = eventData || {};
-      if (noteId === note.id) {
-        console.log(`[NoteCard] 收到引用关系更新事件，重新加载笔记${note.id}的引用数据`);
+      const { noteId, affectedNoteIds } = eventData || {};
+      // 如果更新的笔记ID匹配当前笔记，或者当前笔记在受影响列表中
+      if (noteId === note.id || (affectedNoteIds && affectedNoteIds.includes(note.id))) {
         loadReferences();
       }
     };
@@ -424,7 +431,6 @@ const NoteCard = ({ note, onEdit, onDelete, onPin, onFavorite, onNoteClick, note
     
     // 清理函数
     return () => {
-      clearInterval(pollInterval);
       globalEvents.off(GLOBAL_EVENTS.NOTE_REFERENCES_UPDATED, handleReferencesUpdated);
     };
   }, [note.id]);
@@ -549,9 +555,9 @@ const NoteCard = ({ note, onEdit, onDelete, onPin, onFavorite, onNoteClick, note
       };
     }
     
-    // 如果找不到对应的预设颜色，使用默认颜色
+    // 如果找不到对应的预设颜色，使用默认灰色（与TagManager一致）
     return {
-      backgroundColor: '#3B82F6', // 默认天蓝色
+      backgroundColor: '#9CA3AF',
       color: '#ffffff'
     };
   };

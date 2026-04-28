@@ -5,6 +5,38 @@ const fs = require('fs');
 // 默认用户ID常量
 const userId = 'default_user';
 
+/**
+ * 从笔记内容中提取所有引用关系
+ * 格式：[[wiki-link]] 语法：[[笔记ID]] 或 [[笔记ID|显示文本]]
+ */
+function extractAllReferences(content) {
+  if (!content) return [];
+  
+  const references = [];
+  const seenNoteIds = new Set();
+  
+  // 解析 [[wiki-link]] 语法
+  // 格式：[[noteId]] 或 [[noteId|显示文本]]
+  const wikiLinkRegex = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
+  let match;
+  
+  while ((match = wikiLinkRegex.exec(content)) !== null) {
+    const noteId = match[1].trim();
+    const displayText = match[2]?.trim() || noteId;
+    
+    if (noteId && !seenNoteIds.has(noteId)) {
+      seenNoteIds.add(noteId);
+      references.push({
+        noteId: noteId,
+        text: displayText,
+        format: 'wiki-link'
+      });
+    }
+  }
+  
+  return references;
+}
+
 // 导入文件处理函数
 let uploadUtils;
 try {
@@ -1029,40 +1061,28 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
         }
       }
       
-      // 自动触发引用关系检查和创建
+      // 自动触发引用关系检查和创建（支持 [[wiki-link]] 语法）
       if (content && newNote.id) {
         try {
-          // 静默处理自动引用检查开始日志
-          
-          // 解析笔记中的引用
-          const httpReferences = [];
-          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)\)/g;
-          let match;
-          
-          while ((match = httpReferenceRegex.exec(content)) !== null) {
-            const [fullMatch, referenceText, referencedNoteId] = match;
-            const existingRef = httpReferences.find(ref => ref.noteId === referencedNoteId);
-            if (!existingRef) {
-              httpReferences.push({
-                noteId: referencedNoteId,
-                text: referenceText,
-                fullMatch: fullMatch
-              });
-            }
-          }
+          // 提取引用关系：解析 [[wiki-link]] 语法
+          const references = extractAllReferences(content);
           
           // 创建引用关系
-          let createdReferences = 0;
-          for (const reference of httpReferences) {
+          for (const reference of references) {
             try {
               const referencedNote = await noteModel.getById(reference.noteId, userId);
               if (!referencedNote) {
                 continue;
               }
               
+              // 避免自引用
+              if (reference.noteId === newNote.id.toString()) {
+                continue;
+              }
+              
               await new Promise((resolve, reject) => {
                 req.db.run(
-                  'INSERT INTO note_references (from_note_id, to_note_id, reference_text, user_id) VALUES (?, ?, ?, ?)',
+                  'INSERT OR IGNORE INTO note_references (from_note_id, to_note_id, reference_text, user_id) VALUES (?, ?, ?, ?)',
                   [newNote.id, reference.noteId, reference.text, userId],
                   function(err) {
                     if (err) reject(err);
@@ -1070,13 +1090,10 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
                   }
                 );
               });
-              
-              createdReferences++;
             } catch (refError) {
               console.error('创建引用关系失败:', refError.message);
             }
           }
-          
         } catch (autoRefError) {
           console.error('自动引用检查失败:', autoRefError.message);
         }
@@ -1129,27 +1146,11 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
         }
       }
       
-      // 自动触发引用关系检查和更新
+      // 自动触发引用关系检查和更新（支持 [[wiki-link]] 语法）
       if (content) {
         try {
-          // 静默处理自动引用检查开始日志
-          
-          // 解析笔记中的引用
-          const httpReferences = [];
-          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)\)/g;
-          let match;
-          
-          while ((match = httpReferenceRegex.exec(content)) !== null) {
-            const [fullMatch, referenceText, referencedNoteId] = match;
-            const existingRef = httpReferences.find(ref => ref.noteId === referencedNoteId);
-            if (!existingRef) {
-              httpReferences.push({
-                noteId: referencedNoteId,
-                text: referenceText,
-                fullMatch: fullMatch
-              });
-            }
-          }
+          // 提取引用关系：解析 [[wiki-link]] 语法
+          const references = extractAllReferences(content);
           
           // 清理旧的引用关系
           await new Promise((resolve, reject) => {
@@ -1164,17 +1165,21 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
           });
           
           // 创建新的引用关系
-          let createdReferences = 0;
-          for (const reference of httpReferences) {
+          for (const reference of references) {
             try {
               const referencedNote = await noteModel.getById(reference.noteId, userId);
               if (!referencedNote) {
                 continue;
               }
               
+              // 避免自引用
+              if (reference.noteId === id.toString()) {
+                continue;
+              }
+              
               await new Promise((resolve, reject) => {
                 req.db.run(
-                  'INSERT INTO note_references (from_note_id, to_note_id, reference_text, user_id) VALUES (?, ?, ?, ?)',
+                  'INSERT OR IGNORE INTO note_references (from_note_id, to_note_id, reference_text, user_id) VALUES (?, ?, ?, ?)',
                   [id, reference.noteId, reference.text, userId],
                   function(err) {
                     if (err) reject(err);
@@ -1182,16 +1187,22 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
                   }
                 );
               });
-              
-              createdReferences++;
             } catch (refError) {
               console.error('创建引用关系失败:', refError.message);
             }
           }
-          
-          // 静默处理自动引用检查完成日志
+
+          // 通过WebSocket通知前端更新引用数据
+          if (global.io) {
+            global.io.emit('references_updated', {
+              type: 'NOTE_REFERENCES_UPDATED',
+              noteId: id,
+              affectedNoteIds: [id, ...references.map(r => r.noteId)],
+              message: `引用关系已更新`
+            });
+          }
         } catch (autoRefError) {
-          // 静默处理自动引用检查错误
+          console.error('自动引用检查失败:', autoRefError.message);
         }
       }
       
@@ -1640,241 +1651,44 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
   });
 
   // 解析引用关系（基于特殊字符检测）
-  router.post('/parse-references/:noteId', async (req, res) => {
-    try {
-      const { noteId } = req.params;
-      // 使用全局userId常量
-      
-      // 静默处理引用解析开始日志
-      
-      const note = await noteModel.getById(noteId, userId);
-      if (!note) {
-        return res.status(404).json({ error: '笔记不存在' });
-      }
-      
-      const content = note.content || '';
-      const REFERENCE_PREFIX = '\u2060\u2061\u2062'; // 特殊字符标识
-      
-      // 检测是否包含引用标签
-      if (!content.includes(REFERENCE_PREFIX)) {
-        return res.json({ 
-          success: true, 
-          message: '未检测到引用标识',
-          processedReferences: 0
-        });
-      }
-      
-      // 提取所有带特殊字符的引用链接，支持多种端口和复杂ID格式
-      const referencePattern = new RegExp(`${REFERENCE_PREFIX}\[([^\]]+)\]\(http://localhost:(\d+)/note/([a-zA-Z0-9\-_.]+)\)`, 'g');
-      const references = [];
-      let match;
-      
-      while ((match = referencePattern.exec(content)) !== null) {
-        const [fullMatch, title, port, referencedNoteId] = match;
-        references.push({
-          fullMatch,
-          title,
-          port,
-          noteId: referencedNoteId, // 保持原始ID格式，支持复杂ID
-          position: match.index
-        });
-      }
-      
-      // 静默处理找到引用数量日志
-      
-      if (references.length === 0) {
-        return res.json({ 
-          success: true, 
-          message: '未找到有效的引用链接',
-          processedReferences: 0
-        });
-      }
-      
-      let createdReferences = 0;
-      let updatedContent = content;
-      const processedNoteIds = new Set();
-      
-      // 处理每个引用
-      for (const reference of references) {
-        try {
-          // 验证被引用的笔记是否存在
-          const referencedNote = await noteModel.getById(reference.noteId, userId);
-          if (!referencedNote) {
-            // 静默处理被引用笔记不存在日志
-            continue;
-          }
-          
-          // 创建引用关系
-          await req.noteReferenceModel.create(noteId, reference.noteId, reference.title, userId);
-          createdReferences++;
-          // 静默处理创建引用关系日志
-          
-          // 移除特殊字符标识（保留引用链接）
-          const cleanReference = reference.fullMatch.replace(REFERENCE_PREFIX, '');
-          updatedContent = updatedContent.replace(reference.fullMatch, cleanReference);
-          
-          // 在被引用的笔记中添加反向链接标识
-          if (!processedNoteIds.has(reference.noteId)) {
-            const targetContent = referencedNote.content || '';
-            const BACKLINK_MARKER = '\u200C'; // 零宽非连接符，用于标识被引用关系
-            const backlinkText = `\n[被笔记{noteId}引用]`;
-            
-            if (!targetContent.includes(backlinkText) && !targetContent.includes(BACKLINK_MARKER)) {
-              const newTargetContent = targetContent + BACKLINK_MARKER + backlinkText;
-              
-              await noteModel.update(reference.noteId, userId, {
-                content: newTargetContent,
-                tags: referencedNote.tags ? referencedNote.tags.split(',') : []
-              });
-              
-              processedNoteIds.add(reference.noteId);
-              // 静默处理添加反向链接标识日志
-            }
-          }
-        } catch (error) {
-          // 静默处理处理引用错误
-        }
-      }
-      
-      // 更新当前笔记的内容（添加隐藏字符标识?
-      if (updatedContent !== content) {
-        try {
-          const currentNote = await noteModel.getById(noteId, userId);
-          const updateData = {
-            content: updatedContent,
-            tags: currentNote.tags ? currentNote.tags.split(',') : []
-          };
-          // 静默处理准备更新当前笔记日志
-          await noteModel.update(noteId, userId, updateData);
-          // 静默处理更新当前笔记内容日志
-        } catch (error) {
-          // 静默处理更新当前笔记内容错误
-        }
-      }
-      
-      // 触发全局事件，通知前端更新引用数据
-      // 静默处理触发引用关系更新事件日志
-      
-      // 收集所有受影响的笔记ID（当前笔记和被引用的笔记?
-      const affectedNoteIds = new Set([noteId]);
-      processedNoteIds.forEach(backlinkId => affectedNoteIds.add(backlinkId));
-      
-      res.json({ 
-        success: true, 
-        processedReferences: references.length,
-        createdReferences: createdReferences,
-        updatedBacklinks: processedNoteIds.size,
-        affectedNoteIds: Array.from(affectedNoteIds),
-        message: `成功处理 ${references.length} 个引用，创建 ${createdReferences} 个引用关系，更新 ${processedNoteIds.size} 个反向链接`
-      });
-    } catch (error) {
-      // 静默处理解析引用关系错误
-      res.status(500).json({ error: '解析引用关系失败' });
-    }
-  });
-
-  // 处理双向链接
+  // 处理双向链接 - 简化版：仅管理 note_references 表，不注入隐藏字符和反向链接文本
   router.post('/bidirectional-links/:noteId', async (req, res) => {
     try {
       const { noteId, content } = req.body;
-      // 使用全局userId常量
       
       if (!noteId || !content) {
         return res.status(400).json({ error: '缺少必要参数' });
       }
 
       console.log('[双向链接] 开始处理双向链接，笔记ID:', noteId);
-      // 静默处理笔记内容日志
-      
-      // 定义隐藏字符标识?
-      const REFERENCE_MARKER = '\u200B'; // 零宽空格，用于标识引用关?
-      const BACKLINK_MARKER = '\u200C'; // 零宽非连接符，用于标识被引用关系
-      
-      // 解析内容中的HTTP笔记引用链接
-      // 支持多种格式?
-      // 1. 纯URL: http://localhost:{port}/note/123
-      // 2. Markdown链接: [文本](http://localhost:{port}/note/123)
-      // 3. 包含HTML标签的链? [<u>111</u>](http://localhost:{port}/note/123)
-      // 4. 带前缀的引? trrr> [<u>111</u>](http://localhost:{port}/note/176)
-      const httpLinkPatterns = [
-        // 带前缀的Markdown链接格式（如：trrr> [<u>111</u>](http://localhost:{port}/note/176)?
-        /(?:^|\s)([^>\s]*>)?\s*\[([^\]]*)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)\)/gm,
-        // 普通Markdown链接格式（包括可能的HTML标签?
-        /\[([^\]]*)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)\)/g,
-        // 纯URL格式
-        /(?<!\]\()http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)(?!\))/g
-      ];
-      
-      const httpReferences = [];
-      let updatedContent = content;
-      
-      // 处理每种模式
-      for (let i = 0; i < httpLinkPatterns.length; i++) {
-        const pattern = httpLinkPatterns[i];
-        let match;
-        while ((match = pattern.exec(content)) !== null) {
-          let referencedNoteId, referenceText, fullMatch;
-          
-          if (i === 0) {
-            // 带前缀的Markdown链接格式：match[1]=前缀, match[2]=链接文本, match[3]=笔记ID
-            referencedNoteId = match[3];
-            referenceText = match[2] || `笔记${referencedNoteId}`;
-            fullMatch = match[0];
-          } else if (i === 1) {
-            // 普通Markdown链接格式：match[1]=链接文本, match[2]=笔记ID
-            referencedNoteId = match[2];
-            referenceText = match[1] || `笔记${referencedNoteId}`;
-            fullMatch = match[0];
-          } else {
-            // 纯URL格式：match[1]=笔记ID
-            referencedNoteId = match[1];
-            referenceText = `笔记${referencedNoteId}`;
-            fullMatch = match[0];
-          }
-          
-          if (referencedNoteId && referencedNoteId !== noteId.toString()) { // 避免自引?
-            // 避免重复添加同一个引?
-            const existingRef = httpReferences.find(ref => ref.noteId === referencedNoteId);
-            if (!existingRef) {
-              httpReferences.push({
-                noteId: referencedNoteId,
-                text: referenceText,
-                fullMatch: fullMatch
-              });
-              
-              // 在链接前添加隐藏字符标识，表示这是一个引?
-              if (!fullMatch.includes(REFERENCE_MARKER)) {
-                updatedContent = updatedContent.replace(fullMatch, REFERENCE_MARKER + fullMatch);
-              }
-            }
-          }
-        }
-        // 重置正则表达式的lastIndex，避免影响下一次匹?
-        pattern.lastIndex = 0;
-      }
-      
-      // 静默处理发现HTTP引用日志
-      
-      // 先清理当前笔记的所有引用关系（避免重复?
+
+      // 使用 extractAllReferences 解析 [[wiki-link]] 语法
+      const references = extractAllReferences(content);
+      // 过滤自引用
+      const filteredReferences = references.filter(ref => ref.noteId !== noteId.toString());
+
+      console.log('[双向链接] 发现引用:', filteredReferences.length, '个');
+
+      // 清理当前笔记的所有引用关系（避免重复）
       await req.noteReferenceModel.db.run(
         'DELETE FROM note_references WHERE from_note_id = ? AND user_id = ?',
         [noteId, userId]
       );
       
       let createdReferences = 0;
-      let updatedBacklinks = [];
-      
-      // 为每个被引用的笔记创建引用关系记?
-      for (const reference of httpReferences) {
+      const affectedNoteIds = new Set([noteId]);
+
+      // 为每个被引用的笔记创建引用关系记录
+      for (const reference of filteredReferences) {
         try {
-          // 验证被引用的笔记是否存在且用户有权限访问
+          // 验证被引用的笔记是否存在
           const referencedNote = await noteModel.getById(reference.noteId, userId);
           if (!referencedNote) {
-            // 静默处理被引用笔记不存在日志
+            console.log('[双向链接] 被引用笔记不存在:', reference.noteId);
             continue;
           }
           
-          // 创建引用关系记录
+          // 创建引用关系记录（INSERT OR IGNORE 避免重复）
           const result = await req.noteReferenceModel.create(
             noteId, 
             reference.noteId, 
@@ -1884,64 +1698,15 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
           
           if (result.id) {
             createdReferences++;
-            // 静默处理创建引用关系日志
-            
-            // 在被引用的笔记中添加反向链接标识
-            let targetContent = referencedNote.content || '';
-            const backlinkText = `${BACKLINK_MARKER}[被笔记{noteId}引用]`;
-            
-            // 检查是否已经存在这个反向链接标签
-            if (!targetContent.includes(`[被笔记{noteId}引用]`)) {
-              // 检测反向链接前面是否需要添加回?
-              const needsNewline = targetContent.length > 0 && !targetContent.endsWith('\n');
-              if (needsNewline) {
-                targetContent += '\n' + backlinkText;
-              } else {
-                targetContent += backlinkText;
-              }
-              
-              // 更新被引用笔记的内容
-              const updateData = {
-                content: targetContent,
-                tags: referencedNote.tags ? referencedNote.tags.split(',') : []
-              };
-              // 静默处理准备更新笔记日志
-              await noteModel.update(reference.noteId, userId, updateData);
-              
-              updatedBacklinks.push(reference.noteId);
-              // 静默处理添加反向链接标识日志
-            }
+            affectedNoteIds.add(reference.noteId);
           }
         } catch (error) {
-          // 静默处理创建引用关系失败错误
+          console.error('[双向链接] 创建引用关系失败:', error.message);
         }
       }
       
-      // 更新当前笔记的内容（添加隐藏字符标识?
-      if (updatedContent !== content) {
-        try {
-          const currentNote = await noteModel.getById(noteId, userId);
-          const updateData = {
-            content: updatedContent,
-            tags: currentNote.tags ? currentNote.tags.split(',') : []
-          };
-          // 静默处理准备更新当前笔记日志
-          await noteModel.update(noteId, userId, updateData);
-          // 静默处理更新当前笔记内容日志
-        } catch (error) {
-          // 静默处理更新当前笔记内容错误
-        }
-      }
-      
-      // 触发全局事件，通知前端更新引用数据
-      // 静默处理触发引用关系更新事件日志
-      
-      // 收集所有受影响的笔记ID（当前笔记和被引用的笔记）
-      const affectedNoteIds = new Set([noteId]);
-      updatedBacklinks.forEach(backlinkId => affectedNoteIds.add(backlinkId));
-      
-      // 通过WebSocket通知前端更新引用数据
-      if (global.io && global.connectedUsers) {
+      // 通过 WebSocket 通知前端更新引用数据
+      if (global.io) {
         const eventData = {
           type: 'NOTE_REFERENCES_UPDATED',
           noteId: noteId,
@@ -1950,180 +1715,32 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
         };
         
         // 向特定用户发送事件
-        const userSocketId = global.connectedUsers.get(userId);
-        if (userSocketId) {
-          global.io.to(userSocketId).emit('references_updated', eventData);
-          // 静默处理WebSocket发送事件日志
-        } else {
-          // 静默处理WebSocket用户未连接日志
+        if (global.connectedUsers) {
+          const userSocketId = global.connectedUsers.get(userId);
+          if (userSocketId) {
+            global.io.to(userSocketId).emit('references_updated', eventData);
+          }
         }
         
-        // 同时广播给所有连接的客户端（可选）
+        // 广播给所有连接的客户端
         global.io.emit('references_updated', {
           ...eventData,
           broadcast: true
         });
-        // 静默处理WebSocket广播事件日志
-      } else {
-        // 静默处理WebSocket未初始化警告
       }
       
       res.json({ 
         success: true, 
-        processedReferences: httpReferences.length,
+        processedReferences: filteredReferences.length,
         createdReferences: createdReferences,
-        updatedBacklinks: updatedBacklinks.length,
-        message: `成功处理 ${httpReferences.length} 个引用，创建 ${createdReferences} 个引用关系，更新 ${updatedBacklinks.length} 个反向链接`
+        message: `成功处理 ${filteredReferences.length} 个引用，创建 ${createdReferences} 个引用关系`
       });
     } catch (error) {
-      // 静默处理双向链接处理失败错误
+      console.error('[双向链接] 处理失败:', error.message);
       res.status(500).json({ error: '处理双向链接失败' });
     }
   });
 
   // 检测笔记中的隐藏字符标签
-  router.get('/detect-references/:noteId', async (req, res) => {
-    try {
-      const { noteId } = req.params;
-      // 使用全局userId常量
-      
-      const note = await noteModel.getById(noteId, userId);
-      if (!note) {
-        return res.status(404).json({ error: '笔记不存在' });
-      }
-      
-      const REFERENCE_MARKER = '\u200B'; // 零宽空格，用于标识引用关?
-      const BACKLINK_MARKER = '\u200C'; // 零宽非连接符，用于标识被引用关系
-      
-      const content = note.content || '';
-      
-      // 检测引用标签
-      const hasReferences = content.includes(REFERENCE_MARKER);
-      const hasBacklinks = content.includes(BACKLINK_MARKER);
-      
-      // 统计隐藏字符数量
-      const referenceCount = (content.match(new RegExp(REFERENCE_MARKER, 'g')) || []).length;
-      const backlinkCount = (content.match(new RegExp(BACKLINK_MARKER, 'g')) || []).length;
-      
-      res.json({
-        noteId: noteId,
-        hasReferences: hasReferences,
-        hasBacklinks: hasBacklinks,
-        referenceCount: referenceCount,
-        backlinkCount: backlinkCount,
-        contentLength: content.length
-      });
-    } catch (error) {
-      // 静默处理检测引用标识失败错误
-      res.status(500).json({ error: '检测引用标识失败' });
-    }
-  });
-
-  // 格式化引用符号前面的回车
-  router.post('/format-references/:noteId', async (req, res) => {
-    try {
-      const { noteId } = req.params;
-      // 使用全局userId常量
-      
-      const note = await noteModel.getById(noteId, userId);
-      if (!note) {
-        return res.status(404).json({ error: '笔记不存在' });
-      }
-      
-      let content = note.content || '';
-      const originalContent = content;
-      
-      // 检测引用符号前面是否需要添加回?
-      // 匹配 > [ 模式，但前面不是换行符的情况
-      // 使用更精确的正则表达式，避免匹配已经有换行符的情?
-      const referencePattern = /([^\n])( *> *\[)/g;
-      let addedNewlines = 0;
-      
-      content = content.replace(referencePattern, (match, beforeChar, referenceStart) => {
-        // 如果前面的字符不是换行符，则添加换行?
-        if (beforeChar !== '\n') {
-          addedNewlines++;
-          const replacement = beforeChar + '\n' + referenceStart;
-          // 静默处理格式化引用添加回车日志
-          return replacement;
-        }
-        return match;
-      });
-      
-      if (addedNewlines > 0) {
-        // 更新笔记内容
-        await noteModel.update(noteId, userId, {
-          content: content,
-          tags: note.tags ? note.tags.split(',') : []
-        });
-        
-        // 静默处理格式化引用完成日志
-      }
-      
-      res.json({
-        success: true,
-        noteId: noteId,
-        addedNewlines: addedNewlines,
-        originalLength: originalContent.length,
-        newLength: content.length,
-        message: `成功添加 ${addedNewlines} 个回车到引用符号前面`
-      });
-    } catch (error) {
-      // 静默处理格式化引用符号失败错误
-      res.status(500).json({ error: '格式化引用符号失败' });
-    }
-  });
-
-  // 清理笔记中的隐藏字符标识
-  router.post('/clean-references/:noteId', async (req, res) => {
-    try {
-      const { noteId } = req.params;
-      // 使用全局userId常量
-      
-      const note = await noteModel.getById(noteId, userId);
-      if (!note) {
-        return res.status(404).json({ error: '笔记不存在' });
-      }
-      
-      const REFERENCE_MARKER = '\u200B'; // 零宽空格，用于标识引用关?
-      const BACKLINK_MARKER = '\u200C'; // 零宽非连接符，用于标识被引用关系
-      
-      let content = note.content || '';
-      const originalLength = content.length;
-      
-      // 清理隐藏字符
-      content = content.replace(new RegExp(REFERENCE_MARKER, 'g'), '');
-      content = content.replace(new RegExp(BACKLINK_MARKER, 'g'), '');
-      
-      // 清理反向链接文本
-      content = content.replace(/\n?\[被笔记\d+引用\]/g, '');
-      
-      const cleanedLength = content.length;
-      const removedChars = originalLength - cleanedLength;
-      
-      if (removedChars > 0) {
-        // 更新笔记内容
-        await noteModel.update(noteId, userId, {
-          content: content,
-          tags: note.tags ? note.tags.split(',') : []
-        });
-        
-        // 静默处理清理引用完成日志
-      }
-      
-      res.json({
-        success: true,
-        noteId: noteId,
-        originalLength: originalLength,
-        cleanedLength: cleanedLength,
-        removedChars: removedChars,
-        message: `成功清理 ${removedChars} 个隐藏字符`
-      });
-    } catch (error) {
-      // 静默处理清理引用标识失败错误
-      res.status(500).json({ error: '清理引用标识失败' });
-    }
-  });
-
   return router;
 };

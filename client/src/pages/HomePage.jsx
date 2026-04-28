@@ -43,7 +43,14 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
   const searchRef = useRef(null);
   
   // 标签颜色相关状态
-  const [tagColorMap, setTagColorMap] = useState({});
+  const [tagColorMap, setTagColorMap] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tagColors');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [colorDataLoaded, setColorDataLoaded] = useState(false);
   
   // 滚动相关状态
@@ -58,22 +65,21 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
   
   // 预设颜色列表
   const commonColors = [
-    { name: '蓝色', value: 'blue', hexColor: '#3B82F6' },
-    { name: '绿色', value: 'green', hexColor: '#10B981' },
-    { name: '红色', value: 'red', hexColor: '#EF4444' },
-    { name: '黄色', value: 'yellow', hexColor: '#F59E0B' },
-    { name: '紫色', value: 'purple', hexColor: '#8B5CF6' },
-    { name: '粉色', value: 'pink', hexColor: '#EC4899' },
+    { name: '天蓝色', value: 'blue', hexColor: '#3B82F6' },
+    { name: '翠绿色', value: 'green', hexColor: '#10B981' },
+    { name: '紫罗兰', value: 'purple', hexColor: '#8B5CF6' },
+    { name: '橙黄色', value: 'orange', hexColor: '#F59E0B' },
+    { name: '玫瑰红', value: 'rose', hexColor: '#F43F5E' },
     { name: '青色', value: 'cyan', hexColor: '#06B6D4' },
-    { name: '橙色', value: 'orange', hexColor: '#F97316' },
+    { name: '粉色', value: 'pink', hexColor: '#EC4899' },
     { name: '灰色', value: 'gray', hexColor: '#6B7280' },
-    { name: '靛蓝', value: 'indigo', hexColor: '#6366F1' },
-    { name: '石灰', value: 'lime', hexColor: '#84CC16' },
-    { name: '翠绿', value: 'emerald', hexColor: '#059669' },
-    { name: '天蓝', value: 'sky', hexColor: '#0EA5E9' },
-    { name: '玫瑰', value: 'rose', hexColor: '#F43F5E' },
-    { name: '琥珀', value: 'amber', hexColor: '#D97706' },
-    { name: '青柠', value: 'teal', hexColor: '#14B8A6' }
+    { name: '琥珀色', value: 'amber', hexColor: '#FBBF24' },
+    { name: '靛蓝色', value: 'indigo', hexColor: '#6366F1' },
+    { name: '石灰色', value: 'lime', hexColor: '#84CC16' },
+    { name: '红色', value: 'red', hexColor: '#EF4444' },
+    { name: '青柠色', value: 'teal', hexColor: '#14B8A6' },
+    { name: '天际蓝', value: 'sky', hexColor: '#0EA5E9' },
+    { name: '祖母绿', value: 'emerald', hexColor: '#059669' }
   ];
   
   // 使用智能定位hook来动态定位+按钮到卡片列表右下角
@@ -300,22 +306,21 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
   // 监听标签颜色更新事件
   useEffect(() => {
     const handleTagColorsUpdated = async (event) => {
-      // 重新从服务器同步数据
-      try {
-        const updatedTagColors = await fetchTagColors();
+      const { tagName, color } = event.detail || {};
+      
+      // 优先使用事件携带的新颜色数据直接更新本地状态，避免从服务器获取旧数据导致颜色闪回默认值
+      if (tagName && color) {
+        setTagColorMap(prev => ({
+          ...prev,
+          [tagName]: color
+        }));
         
-        // 更新本地状态和存储
-        setTagColorMap(updatedTagColors);
-        localStorage.setItem('tagColors', JSON.stringify(updatedTagColors));
-      } catch (error) {
-        console.error('同步标签颜色失败:', error);
-        // 如果同步失败，至少更新当前标签的颜色
-        const { tagName, color } = event.detail || {};
-        if (tagName && color) {
-          setTagColorMap(prev => ({
-            ...prev,
-            [tagName]: color
-          }));
+        try {
+          const savedColors = JSON.parse(localStorage.getItem('tagColors') || '{}');
+          savedColors[tagName] = color;
+          localStorage.setItem('tagColors', JSON.stringify(savedColors));
+        } catch (e) {
+          // ignore
         }
       }
     };
@@ -368,7 +373,7 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
   const getTagStyleFromState = (tagName) => {
     if (!tagName) {
       return {
-        backgroundColor: '#6B7280', // 默认灰色
+        backgroundColor: '#9CA3AF', // 默认灰色
         color: '#ffffff'
       };
     }
@@ -392,9 +397,9 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
       };
     }
     
-    // 如果找不到对应的预设颜色，使用默认颜色
+    // 如果找不到对应的预设颜色，使用默认灰色（与TagManager一致）
     return {
-      backgroundColor: '#6B7280', // 默认灰色
+      backgroundColor: '#9CA3AF',
       color: '#ffffff'
     };
   };
@@ -757,6 +762,15 @@ const HomePage = ({ updateTags, dateFilter, onDateFilter, selectedTag, onTagChan
     loadNoteDates();
   }, []);
 
+  // 从编辑页面返回时刷新笔记列表
+  useEffect(() => {
+    if (location.state?.noteUpdated) {
+      loadNotes();
+      // 清除 state 避免重复刷新
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
+
   // 页面获得焦点时刷新标签数据（确保标签数据最新）
 useEffect(() => {
   const handleFocus = () => {
@@ -1051,10 +1065,7 @@ useEffect(() => {
                     {selectedTag && (
                       <div 
                         className="flex items-center gap-1 px-3 py-1 rounded-full text-sm"
-                        style={colorDataLoaded ? getTagStyleFromState(selectedTag) : {
-                          backgroundColor: '#6B7280',
-                          color: '#ffffff'
-                        }}
+                        style={getTagStyleFromState(selectedTag)}
                       >
                         <span>标签: #{selectedTag}</span>
                         <button

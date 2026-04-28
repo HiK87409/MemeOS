@@ -10,7 +10,11 @@ export const commonColors = [
   { name: '灰色', value: 'gray', hexColor: '#6B7280' },
   { name: '琥珀色', value: 'amber', hexColor: '#FBBF24' },
   { name: '靛蓝色', value: 'indigo', hexColor: '#6366F1' },
-  { name: '石灰色', value: 'lime', hexColor: '#84CC16' }
+  { name: '石灰色', value: 'lime', hexColor: '#84CC16' },
+  { name: '红色', value: 'red', hexColor: '#EF4444' },
+  { name: '青柠色', value: 'teal', hexColor: '#14B8A6' },
+  { name: '天际蓝', value: 'sky', hexColor: '#0EA5E9' },
+  { name: '祖母绿', value: 'emerald', hexColor: '#059669' }
 ];
 
 // 获取默认颜色
