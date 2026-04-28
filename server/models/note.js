@@ -73,6 +73,10 @@ class NoteModel {
               missingColumns.push("ALTER TABLE notes ADD COLUMN hash TEXT");
             }
             
+            if (!columnNames.includes('is_favorite')) {
+              missingColumns.push("ALTER TABLE notes ADD COLUMN is_favorite INTEGER DEFAULT 0");
+            }
+            
             if (missingColumns.length === 0) {
               resolve();
               return;
@@ -108,10 +112,10 @@ class NoteModel {
       let params;
 
       if (searchQuery) {
-        query = `SELECT id, content, tags, hash, user_id, is_pinned, created_at, updated_at FROM notes WHERE user_id = ? AND (content LIKE ? OR tags LIKE ?) ORDER BY CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END, created_at DESC`;
+        query = `SELECT id, content, tags, hash, user_id, is_pinned, is_favorite, created_at, updated_at FROM notes WHERE user_id = ? AND (content LIKE ? OR tags LIKE ?) ORDER BY CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END, created_at DESC`;
         params = [userId, `%${searchQuery}%`, `%${searchQuery}%`];
       } else {
-        query = `SELECT id, content, tags, hash, user_id, is_pinned, created_at, updated_at FROM notes WHERE user_id = ? ORDER BY CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END, created_at DESC`;
+        query = `SELECT id, content, tags, hash, user_id, is_pinned, is_favorite, created_at, updated_at FROM notes WHERE user_id = ? ORDER BY CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END, created_at DESC`;
         params = [userId];
       }
 
@@ -131,6 +135,7 @@ class NoteModel {
             return {
               ...note,
               is_pinned: Boolean(note.is_pinned),
+              is_favorite: Boolean(note.is_favorite || 0),
               tags: parsedTags
             };
           });
@@ -167,7 +172,7 @@ class NoteModel {
         const totalPages = Math.ceil(total / limit);
         
         // 获取分页数据
-      const dataQuery = `SELECT id, content, tags, hash, user_id, is_pinned, created_at, updated_at FROM notes ${whereClause} ORDER BY CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END, created_at DESC LIMIT ? OFFSET ?`;
+      const dataQuery = `SELECT id, content, tags, hash, user_id, is_pinned, is_favorite, created_at, updated_at FROM notes ${whereClause} ORDER BY CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END, created_at DESC LIMIT ? OFFSET ?`;
         const dataParams = [...params, limit, offset];
         
         this.db.all(dataQuery, dataParams, (err, rows) => {
@@ -223,7 +228,7 @@ class NoteModel {
         }
         
         // 获取分页数据
-        const dataQuery = `SELECT id, content, tags, hash, user_id, is_pinned, created_at, updated_at FROM notes WHERE user_id = ? AND tags LIKE ? ORDER BY CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END, created_at DESC LIMIT ? OFFSET ?`;
+        const dataQuery = `SELECT id, content, tags, hash, user_id, is_pinned, is_favorite, created_at, updated_at FROM notes WHERE user_id = ? AND tags LIKE ? ORDER BY CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END, created_at DESC LIMIT ? OFFSET ?`;
         const dataParams = [userId, `%${tag}%`, limit, offset];
         
         this.db.all(dataQuery, dataParams, (err, rows) => {
@@ -278,7 +283,7 @@ class NoteModel {
   getById(id, userId) {
     return new Promise((resolve, reject) => {
       // 只允许用户获取自己的笔记
-    const query = `SELECT id, content, tags, hash, user_id, is_pinned, created_at, updated_at FROM notes WHERE id = ? AND user_id = ?`;
+    const query = `SELECT id, content, tags, hash, user_id, is_pinned, is_favorite, created_at, updated_at FROM notes WHERE id = ? AND user_id = ?`;
       const params = [id, userId];
 
       this.db.get(query, params, (err, row) => {

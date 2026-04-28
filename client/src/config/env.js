@@ -18,8 +18,8 @@ if (dynamicApiUrl) {
   API_BASE_URL = dynamicApiUrl;
 
 } else if (isCapacitor()) {
-  // 在Capacitor环境中，使用电脑的IP地址
-  API_BASE_URL = 'http://192.168.5.5:30002/api';
+  // 在Capacitor环境中，使用动态设置的URL或回退到localhost
+  API_BASE_URL = dynamicApiUrl || 'http://localhost:30002/api';
 } else if (isDevelopment) {
   // 开发环境
   API_BASE_URL = 'http://localhost:30002/api';

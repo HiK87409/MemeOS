@@ -1,245 +1,458 @@
-# 标签同步API文档
+# MemOS API 文档
 
 ## 概述
-本API系统提供了完整的标签配置同步功能，支持标签的增删改查、颜色配置、层级管理以及关联卡片（笔记）的同步操作。
+本 API 系统提供了笔记管理、标签管理、回收站、卡片设置、配色方案和双向链接等完整功能。
 
-## API端点
+**基础路径**: `/api/notes`  
+**认证**: 当前版本无需认证（单用户模式，默认 userId = `default_user`）
 
-### 1. 获取所有标签完整信息
+---
 
-**端点**: `GET /api/notes/tags/all`
+## 笔记管理
 
-**描述**: 获取当前用户的所有标签及其关联的卡片（笔记）信息
+### 获取笔记列表
+`GET /api/notes/`
 
-**认证**: 需要JWT token认证
+**查询参数**:
+- `search` (可选): 搜索关键词，匹配内容和标签
+- `tag` (可选): 按标签筛选
 
-**响应示例**:
+**响应**: 笔记数组
+
+### 获取我的笔记（分页）
+`GET /api/notes/my`
+
+**查询参数**:
+- `search` (可选): 搜索关键词
+- `tag` (可选): 按标签筛选
+- `page` (可选, 默认1): 页码
+- `limit` (可选, 默认10): 每页数量
+
+**响应**: `{ notes: [], total: number, page: number, totalPages: number }`
+
+### 获取单个笔记
+`GET /api/notes/:id`
+
+**响应**: 笔记对象，不存在返回 404
+
+### 创建笔记
+`POST /api/notes/`
+
+**请求体**:
 ```json
 {
-  "success": true,
-  "tags": [
-    {
-      "id": 1,
-      "name": "工作",
-      "color": "#3b82f6",
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "isPinned": false,
-      "isFavorite": false,
-      "level": 0,
-      "cards": [
-        {
-          "id": 1,
-          "content": "会议记录",
-          "createdAt": "2024-01-01T00:00:00.000Z",
-          "updatedAt": "2024-01-01T00:00:00.000Z",
-          "tags": ["工作"]
-        }
-      ]
-    }
-  ]
+  "content": "笔记内容（必填）",
+  "tags": ["标签1", "标签2"],
+  "created_at": "2024-01-01T00:00:00.000Z"
 }
 ```
 
-### 2. 删除标签
+**响应**: `201` 创建的笔记对象（自动解析内容中的引用链接）
 
-**端点**: `DELETE /api/notes/tags/:tagId`
+### 更新笔记
+`PUT /api/notes/:id`
 
-**描述**: 删除指定标签及其相关配置
-
-**认证**: 需要JWT token认证
-
-**参数**:
-- `tagId` (路径参数): 标签ID
-
-**响应示例**:
+**请求体**:
 ```json
 {
-  "success": true,
-  "message": "标签删除成功",
-  "deletedTag": {
+  "content": "更新后的内容",
+  "tags": ["标签1"],
+  "created_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+**响应**: 更新后的笔记对象
+
+### 删除笔记（移到回收站）
+`DELETE /api/notes/:id`
+
+**响应**: `{ message: "笔记删除成功" }`
+
+### 置顶/取消置顶笔记
+`PATCH /api/notes/:id/pin`
+
+**响应**: 更新后的笔记对象
+
+### 收藏/取消收藏笔记
+`PATCH /api/notes/:id/favorite`
+
+**响应**: 更新后的笔记对象
+
+### 获取笔记历史记录
+`GET /api/notes/:id/history`
+
+**响应**: 历史记录数组
+
+---
+
+## 日期相关
+
+### 获取日期范围内有笔记的日期列表
+`GET /api/notes/dates`
+
+**查询参数**:
+- `start` (必填): 开始日期
+- `end` (必填): 结束日期
+
+### 获取特定日期的笔记
+`GET /api/notes/date/:date`
+
+---
+
+## 标签管理
+
+### 获取所有标签（基本接口）
+`GET /api/notes/tags`
+
+**响应**: 标签数组
+
+### 获取所有标签（完整信息，含关联笔记）
+`GET /api/notes/tags/all`
+
+**响应**:
+```json
+[
+  {
     "id": 1,
-    "name": "工作"
-  },
-  "affectedNotes": 3
+    "name": "工作",
+    "color": "blue",
+    "customColor": "#3b82f6",
+    "noteCount": 3,
+    "notes": [{ "id": "...", "title": "...", "content": "...", "created_at": "...", "updated_at": "..." }],
+    "created_at": "...",
+    "updated_at": "..."
+  }
+]
+```
+
+### 根据标签获取笔记
+`GET /api/notes/tag/:tag`
+
+`GET /api/notes/my/tag/:tag`
+
+### 创建标签
+`POST /api/notes/tags`
+
+**请求体**:
+```json
+{
+  "tagName": "新标签（必填）",
+  "color": "blue"
 }
 ```
 
-### 3. 同步所有标签配置
+**响应**: `201` `{ message, tagName, tagId, allTags }`（标签已存在返回 `409`）
 
-**端点**: `POST /api/notes/tags/sync`
+### 删除标签（按名称）
+`DELETE /api/notes/tags/:tag`
 
-**描述**: 批量同步标签配置，支持添加、更新、删除标签以及关联的卡片
+**响应**: `{ message, deletedFromTags, deletedFromNotes }`
 
-**认证**: 需要JWT token认证
+### 删除标签（按ID）
+`DELETE /api/notes/tags/by-id/:tagId`
+
+**响应**: `{ message, deletedFromTags, deletedFromNotes, deletedTag }`
+
+### 删除标签和关联笔记
+`DELETE /api/notes/tags/:tag/with-notes`
+
+**响应**: `{ success, message, deletedNotesCount, deletedFromTags }`
+
+### 从所有笔记中移除标签并删除标签本身
+`DELETE /api/notes/tags/:tag/remove-from-notes`
+
+**响应**: `{ success, message, updatedCount, deletedFromTags }`
+
+### 同步标签配置（批量处理）
+`POST /api/notes/tags/sync`
 
 **请求体**:
 ```json
 {
   "tags": [
     {
-      "id": 1, // 可选，为空时表示新增标签
-      "name": "工作",
-      "color": "#3b82f6",
-      "isPinned": true, // 可选
-      "isFavorite": false, // 可选
-      "level": 1, // 可选
-      "cards": [ // 可选，关联的卡片（笔记）
-        {
-          "id": 1, // 可选，为空时表示新增卡片
-          "content": "会议记录",
-          "createdAt": "2024-01-01T00:00:00.000Z" // 可选
-        }
-      ]
+      "name": "工作（必填）",
+      "color": "blue",
+      "customColor": "#3b82f6",
+      "pinned": false,
+      "order": 0,
+      "notes": []
     }
   ]
 }
 ```
 
-**响应示例**:
+**响应**:
 ```json
 {
   "success": true,
   "message": "标签同步完成",
   "results": {
-    "added": [
-      {
-        "id": 2,
-        "name": "生活",
-        "color": "#10b981",
-        "isPinned": false,
-        "isFavorite": false,
-        "level": 0
-      }
-    ],
-    "updated": [
-      {
-        "id": 1,
-        "name": "工作",
-        "color": "#3b82f6",
-        "isPinned": true,
-        "isFavorite": false,
-        "level": 1
-      }
-    ],
-    "deleted": [
-      {
-        "id": 3,
-        "name": "旧标签"
-      }
-    ],
-    "errors": []
-  },
-  "tags": [
-    {
-      "id": 1,
-      "name": "工作",
-      "color": "#3b82f6",
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z"
-    },
-    {
-      "id": 2,
-      "name": "生活",
-      "color": "#10b981",
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z"
-    }
-  ]
+    "added": [],
+    "updated": [],
+    "deleted": [],
+    "errors": [],
+    "summary": { "totalProcessed": 0, "addedCount": 0, "updatedCount": 0, "deletedCount": 0, "errorCount": 0 }
+  }
 }
 ```
 
-## 功能说明
+### 更新标签顺序（支持父子关系）
+`PUT /api/notes/tags/order`
 
-### 标签属性
-- `id`: 标签唯一标识符
-- `name`: 标签名称
-- `color`: 标签颜色（十六进制格式）
-- `isPinned`: 是否置顶
-- `isFavorite`: 是否收藏
-- `level`: 标签层级
-- `createdAt`: 创建时间
-- `updatedAt`: 更新时间
-
-### 卡片属性
-- `id`: 卡片（笔记）ID
-- `content`: 卡片内容
-- `createdAt`: 创建时间
-- `updatedAt`: 更新时间
-- `tags`: 关联的标签数组
-
-### 同步逻辑
-1. **新增标签**: 当标签ID为空时，创建新标签
-2. **更新标签**: 当标签ID存在时，更新现有标签信息
-3. **删除标签**: 服务器存在但客户端未发送的标签会被删除
-4. **卡片同步**: 每个标签可以关联多个卡片，支持新增和更新
-5. **错误处理**: 每个操作都有独立的错误处理，不会影响其他操作
-
-## 使用示例
-
-### 获取所有标签
-```javascript
-const response = await fetch('/api/notes/tags/all', {
-  headers: {
-    'Authorization': 'Bearer your-jwt-token'
-  }
-});
-const data = await response.json();
-console.log(data.tags);
+**请求体**:
+```json
+{
+  "tagOrders": [{ "tagId": 1, "sortOrder": 0 }],
+  "tagHierarchy": [{ "tagId": 2, "parentId": 1 }]
+}
 ```
 
-### 同步标签配置
-```javascript
-const syncData = {
-  tags: [
-    {
-      name: '新标签',
-      color: '#ef4444',
-      isPinned: true,
-      cards: [
-        {
-          content: '这是一个新卡片'
-        }
-      ]
-    },
-    {
-      id: 1,
-      name: '更新的标签',
-      color: '#8b5cf6'
-    }
-  ]
-};
+---
 
-const response = await fetch('/api/notes/tags/sync', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer your-jwt-token'
-  },
-  body: JSON.stringify(syncData)
-});
+## 标签颜色
 
-const result = await response.json();
-console.log('同步结果:', result.results);
+### 获取用户标签颜色配置
+`GET /api/notes/tag-colors/all`
+
+**响应**: `{ "标签名": "颜色值", ... }`
+
+### 获取用户自定义颜色
+`GET /api/notes/tag-colors/custom`
+
+### 保存标签颜色
+`POST /api/notes/tag-colors`
+
+**请求体**:
+```json
+{
+  "tagName": "工作（必填）",
+  "colorValue": "#3b82f6（必填）",
+  "colorType": "preset"
+}
 ```
 
-### 删除标签
-```javascript
-const response = await fetch('/api/notes/tags/1', {
-  method: 'DELETE',
-  headers: {
-    'Authorization': 'Bearer your-jwt-token'
-  }
-});
+### 删除标签颜色
+`DELETE /api/notes/tag-colors/:tagName`
 
-const result = await response.json();
-console.log('删除结果:', result);
+### 删除自定义颜色
+`DELETE /api/notes/tag-colors/custom/:colorValue`
+
+---
+
+## 配色方案
+
+### 获取所有配色方案
+`GET /api/notes/color-schemes`
+
+**查询参数**:
+- `theme_mode` (可选): 主题模式
+
+### 保存配色方案
+`POST /api/notes/color-schemes`
+
+**请求体**:
+```json
+{
+  "name": "方案名称（必填）",
+  "schemeData": { ... },
+  "theme_mode": "light"
+}
 ```
 
-## 注意事项
+（最多保存10个，超出返回 `400`）
 
-1. **认证**: 所有API都需要JWT token认证
-2. **数据验证**: 服务器会对输入数据进行验证，无效数据会返回错误
-3. **并发处理**: 同步操作是原子的，确保数据一致性
-4. **错误恢复**: 单个操作失败不会影响其他操作的执行
-5. **性能考虑**: 大量数据同步时建议分批处理
+### 删除配色方案
+`DELETE /api/notes/color-schemes/:id`
+
+---
+
+## 回收站
+
+### 获取回收站笔记列表
+`GET /api/notes/recycle-bin`
+
+**查询参数**:
+- `search` (可选, 默认'')
+- `page` (可选, 默认1)
+- `limit` (可选, 默认20)
+
+### 获取回收站统计信息
+`GET /api/notes/recycle-bin/stats`
+
+### 恢复笔记
+`POST /api/notes/recycle-bin/:id/restore`
+
+### 批量恢复笔记
+`POST /api/notes/recycle-bin/bulk-restore`
+
+**请求体**: `{ "ids": ["noteId1", "noteId2"] }`
+
+### 永久删除笔记
+`DELETE /api/notes/recycle-bin/:id`
+
+### 批量永久删除笔记
+`DELETE /api/notes/recycle-bin/batch-delete`
+
+**请求体**: `{ "ids": ["noteId1", "noteId2"] }`
+
+### 清理过期笔记
+`POST /api/notes/recycle-bin/clean-expired`
+
+---
+
+## 卡片设置
+
+### 获取全局卡片设置
+`GET /api/notes/card-settings/global`
+
+**查询参数**:
+- `theme_mode` (可选, 默认'light')
+
+### 保存全局卡片设置
+`POST /api/notes/card-settings/global`
+
+**请求体**:
+```json
+{
+  "settings": { ... },
+  "theme_mode": "light"
+}
+```
+
+### 获取特定笔记的卡片设置
+`GET /api/notes/card-settings/note/:noteId`
+
+**查询参数**:
+- `theme_mode` (可选, 默认'light')
+
+### 保存特定笔记的卡片设置
+`POST /api/notes/card-settings/note/:noteId`
+
+**请求体**:
+```json
+{
+  "settings": { ... },
+  "theme_mode": "light"
+}
+```
+
+### 删除特定笔记的卡片设置
+`DELETE /api/notes/card-settings/note/:noteId`
+
+### 删除所有笔记的个性化设置
+`DELETE /api/notes/card-settings/all-notes`
+
+---
+
+## 双向链接 / 引用关系
+
+### 创建笔记引用关系
+`POST /api/notes/references`
+
+**请求体**:
+```json
+{
+  "fromNoteId": "笔记ID（必填）",
+  "toNoteId": "被引用笔记ID（必填）",
+  "referenceText": "引用文本（必填）"
+}
+```
+
+### 获取笔记的引用关系
+`GET /api/notes/references/:noteId`
+
+### 删除笔记引用关系
+`DELETE /api/notes/references/:fromNoteId/:toNoteId`
+
+### 根据引用文本搜索笔记
+`GET /api/notes/search-by-reference`
+
+**查询参数**:
+- `referenceText` (必填): 引用文本
+
+### 解析引用关系（基于特殊字符检测）
+`POST /api/notes/parse-references/:noteId`
+
+**响应**:
+```json
+{
+  "success": true,
+  "processedReferences": 2,
+  "createdReferences": 2,
+  "updatedBacklinks": 1,
+  "affectedNoteIds": ["noteId1", "noteId2"],
+  "message": "成功处理 2 个引用，创建 2 个引用关系，更新 1 个反向链接"
+}
+```
+
+### 处理双向链接
+`POST /api/notes/bidirectional-links/:noteId`
+
+**请求体**:
+```json
+{
+  "noteId": "笔记ID（必填）",
+  "content": "笔记内容（必填）"
+}
+```
+
+支持解析多种引用格式：
+- Markdown 链接: `[文本](http://localhost:{port}/note/{id})`
+- 带 HTML 标签: `[<u>文本</u>](http://localhost:{port}/note/{id})`
+- 纯 URL: `http://localhost:{port}/note/{id}`
+
+### 检测笔记中的隐藏字符标签
+`GET /api/notes/detect-references/:noteId`
+
+**响应**:
+```json
+{
+  "noteId": "...",
+  "hasReferences": true,
+  "hasBacklinks": false,
+  "referenceCount": 2,
+  "backlinkCount": 0,
+  "contentLength": 500
+}
+```
+
+### 格式化引用符号前面的回车
+`POST /api/notes/format-references/:noteId`
+
+### 清理笔记中的隐藏字符标识
+`POST /api/notes/clean-references/:noteId`
+
+**响应**:
+```json
+{
+  "success": true,
+  "noteId": "...",
+  "originalLength": 500,
+  "cleanedLength": 495,
+  "removedChars": 5,
+  "message": "成功清理 5 个隐藏字符"
+}
+```
+
+---
+
+## 其他路由
+
+上传文件: `/api/upload/*`  
+备份管理: `/api/backup/*`
+
+---
+
+## 错误响应格式
+
+所有错误响应统一格式：
+```json
+{ "error": "错误描述信息" }
+```
+
+常见 HTTP 状态码：
+- `400`: 请求参数错误
+- `404`: 资源不存在
+- `409`: 资源冲突（如标签已存在）
+- `500`: 服务器内部错误

@@ -35,7 +35,7 @@ const upload = multer({ storage: storage });
 
 // 初始化Express应用
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 30002;
 
 // 创建HTTP服务器和Socket.IO实例
 const server = createServer(app);
@@ -170,7 +170,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
       app.use('/api/history', historyRoutes);
       
       // 配置同步路由
-      const configRouter = new ConfigRouter(configModel);
+      const configRouter = new ConfigRouter(configModel, noteModel);
       app.use('/api/config', configRouter.getRouter());
       
       // 收件箱路由
@@ -249,7 +249,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
         server.listen(PORT, '0.0.0.0', () => {
           console.log(`服务器运行在 http://0.0.0.0:${PORT}`);
           console.log(`本地访问: http://localhost:${PORT}`);
-          console.log(`网络访问: http://192.168.5.5:${PORT}`);
           console.log(`WebSocket服务器已启动`);
         });
       } catch (error) {
@@ -261,24 +260,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
     initApp();
   }
 });
-
-// 创建表
-async function initializeDatabase(userModel, noteModel) {
-  try {
-    // 初始化用户表
-    await userModel.initTable();
-    
-    // 初始化笔记表
-    await noteModel.initTable();
-    
-    console.log('数据库表已初始化');
-  } catch (error) {
-    console.error('初始化数据库表失败:', error);
-    throw error;
-  }
-}
-
-
 
 // 优雅关闭
 process.on('SIGINT', async () => {

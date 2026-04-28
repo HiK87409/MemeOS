@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { FiPlus, FiChevronDown, FiX, FiCheck, FiEdit3, FiStar } from 'react-icons/fi';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { FiPlus, FiChevronDown, FiX, FiCheck, FiEdit3, FiStar, FiFolder, FiChevronRight } from 'react-icons/fi';
 // API imports removed - now using localConfigManager for all tag operations
 import PortalPopup from './PortalPopup';
 import localConfigManager from '../utils/localConfigManager';
@@ -13,10 +13,11 @@ const TagPicker = ({
   onClose,
   cardSettings
 }) => {
-  const [availableTags, setAvailableTags] = useState([]);
+  const [availableTags, setAvailableTags] = useState([]); // 完整标签对象数组，包含层级信息
   const [isLoading, setIsLoading] = useState(false);
   const [tagColorMap, setTagColorMap] = useState({});
   const [favoriteTags, setFavoriteTags] = useState([]);
+  const [expandedGroups, setExpandedGroups] = useState(new Set()); // 标签组展开状态
   
   // 新标签创建相关状态
   const [inputValue, setInputValue] = useState('');
@@ -42,27 +43,65 @@ const TagPicker = ({
   // 已选标签模态框相关状态
   const [showSelectedTagsModal, setShowSelectedTagsModal] = useState(false);
 
+  // 构建标签层级结构
+  const buildTagHierarchy = (tags) => {
+    const hierarchy = {};
+    const rootTags = [];
+    
+    tags.forEach(tag => {
+      hierarchy[tag.id] = {
+        ...tag,
+        children: [],
+        level: 0
+      };
+    });
+    
+    tags.forEach(tag => {
+      if (tag.parentId && hierarchy[tag.parentId]) {
+        hierarchy[tag.parentId].children.push(hierarchy[tag.id]);
+        hierarchy[tag.id].level = hierarchy[tag.parentId].level + 1;
+      } else {
+        rootTags.push(hierarchy[tag.id]);
+      }
+    });
+    
+    // 自动推导 isParent
+    Object.values(hierarchy).forEach(tag => {
+      tag.isParent = tag.children && tag.children.length > 0;
+    });
+    
+    return { hierarchy, rootTags };
+  };
+  
+  // 扁平化标签树（带层级缩进信息）
+  const flattenTagTree = (tags, level = 0) => {
+    let result = [];
+    
+    tags.forEach(tag => {
+      result.push({ ...tag, level });
+      if (tag.children && tag.children.length > 0 && expandedGroups.has(tag.id)) {
+        const childTags = flattenTagTree(tag.children, level + 1);
+        result.push(...childTags);
+      }
+    });
+    
+    return result;
+  };
+
   // 加载标签数据
   const loadTags = async () => {
     setIsLoading(true);
     try {
-      // 使用localConfigManager获取标签数据
       const tags = localConfigManager.getTags();
       const tagColors = localConfigManager.getTagColors();
       
-      // 扁平化标签列表
-      const flattenTags = (tags) => {
-        return tags.map(tag => tag.name);
-      };
-      
-      setAvailableTags(flattenTags(tags) || []);
+      setAvailableTags(tags || []);
       setTagColorMap(tagColors || {});
       
-      // 加载收藏列表
       loadFavoriteTags();
     } catch (error) {
       console.error('加载标签失败:', error);
-      setAvailableTags(['工作', '学习', '生活', '想法', '计划', '重要', '待办']);
+      setAvailableTags([]);
     } finally {
       setIsLoading(false);
     }
@@ -231,11 +270,7 @@ const TagPicker = ({
         const tags = localConfigManager.getTags();
         const tagColors = localConfigManager.getTagColors();
         
-        const flattenTags = (tags) => {
-          return tags.map(tag => tag.name);
-        };
-        
-        setAvailableTags(flattenTags(tags) || []);
+        setAvailableTags(tags || []);
         setTagColorMap(tagColors || {});
         loadFavoriteTags();
       };
@@ -283,11 +318,7 @@ const TagPicker = ({
   
   // 处理标签变化事件
   const handleTagsChanged = (tags) => {
-    const flattenTags = (tags) => {
-      return tags.map(tag => tag.name);
-    };
-    
-    setAvailableTags(flattenTags(tags) || []);
+    setAvailableTags(tags || []);
   };
   
   // 处理标签颜色变化事件
@@ -470,10 +501,7 @@ const TagPicker = ({
     if (!trimmedValue) return;
     
     // 检查标签是否已存在
-    const tagExists = availableTags.some(tag => {
-      const tagName = typeof tag === 'string' ? tag : (tag && tag.name);
-      return tagName === trimmedValue;
-    });
+    const tagExists = availableTags.some(tag => tag.name === trimmedValue);
     
     try {
       if (!tagExists) {
@@ -499,9 +527,9 @@ const TagPicker = ({
         }
       }
       
-      // 立即更新本地状态
-      const updatedTags = tagExists ? availableTags : [...availableTags, trimmedValue];
-      setAvailableTags(updatedTags);
+      // 立即更新本地状态 - 重新从 localConfigManager 获取完整标签数据
+      const refreshedTags = localConfigManager.getTags();
+      setAvailableTags(refreshedTags);
       
       // 立即更新标签颜色映射 - 确保使用有效的十六进制颜色值
       let colorToSave = selectedColor;
@@ -589,7 +617,7 @@ const TagPicker = ({
         } else if (filteredTags.length === 1) {
           // 只有一个匹配的标签，自动选择
           const singleTag = filteredTags[0];
-          const tagName = typeof singleTag === 'string' ? singleTag : (singleTag && singleTag.name);
+          const tagName = singleTag.name;
           
           // 自动将匹配的标签添加到已选列表中
           if (!selectedTags.includes(tagName)) {
@@ -641,10 +669,7 @@ const TagPicker = ({
     
     try {
       // 立即更新本地状态，提供即时反馈
-      const updatedTags = availableTags.filter(tag => {
-        const currentTagName = typeof tag === 'string' ? tag : (tag && tag.name);
-        return currentTagName !== tagName;
-      });
+      const updatedTags = availableTags.filter(tag => tag.name !== tagName);
       setAvailableTags(updatedTags);
       
 
@@ -762,43 +787,65 @@ const TagPicker = ({
       setIsSearchMode(true);
       setShowSearchDropdown(true);
     } else {
-      // 搜索词为空时保持搜索模式，显示空状态提示
       setIsSearchMode(true);
       setShowSearchDropdown(true);
     }
   };
 
-  // 智能搜索过滤函数 - 优化搜索关联性
-  const filteredTags = availableTags.filter(tag => {
+  // 切换标签组展开/折叠
+  const toggleGroupExpand = (tagId) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tagId)) {
+        newSet.delete(tagId);
+      } else {
+        newSet.add(tagId);
+      }
+      return newSet;
+    });
+  };
+
+  // 构建层级结构并扁平化（仅在 availableTags 或 expandedGroups 变化时计算）
+  const flattenedTags = useMemo(() => {
+    const { rootTags } = buildTagHierarchy(availableTags);
+    return flattenTagTree(rootTags);
+  }, [availableTags, expandedGroups]);
+
+  // 获取所有标签的扁平列表（忽略展开状态，用于搜索）
+  const allFlatTags = useMemo(() => {
+    const { rootTags } = buildTagHierarchy(availableTags);
+    const flattenAll = (tags, level = 0) => {
+      let result = [];
+      tags.forEach(tag => {
+        result.push({ ...tag, level });
+        if (tag.children && tag.children.length > 0) {
+          result.push(...flattenAll(tag.children, level + 1));
+        }
+      });
+      return result;
+    };
+    return flattenAll(rootTags);
+  }, [availableTags]);
+
+  // 智能搜索过滤函数 - 搜索时使用完整扁平列表，非搜索时使用展开列表
+  const filteredTags = (isSearchMode && searchTerm.trim() ? allFlatTags : flattenedTags).filter(tag => {
     if (!isSearchMode) return false;
     
-    // 确保在搜索模式下总是显示一些内容
     if (!searchTerm.trim()) {
-      // 如果没有可用标签，显示默认标签
-      if (availableTags.length === 0) {
-        return ['工作', '学习', '生活', '想法', '计划', '重要', '待办'].includes(tag);
-      }
-      return true; // 搜索词为空时显示所有标签
+      return true;
     }
     
     const searchLower = searchTerm.toLowerCase().trim();
-    const tagName = typeof tag === 'string' ? tag : (tag && tag.name);
+    const tagName = tag.name || '';
     
     if (!tagName) return false;
     
     const tagNameLower = tagName.toLowerCase();
     
-    // 1. 完全匹配优先级最高
     if (tagNameLower === searchLower) return true;
-    
-    // 2. 开头匹配优先级较高
     if (tagNameLower.startsWith(searchLower)) return true;
-    
-    // 3. 包含匹配
     if (tagNameLower.includes(searchLower)) return true;
     
-    // 4. 拼音匹配（简单的拼音首字母匹配）
-    // 这里可以扩展更复杂的拼音匹配逻辑
     const pinyinMap = {
       'g': ['工作', '管理', '功能', '工具'],
       'x': ['学习', '生活', '想法', '项目', '系统'],
@@ -808,12 +855,10 @@ const TagPicker = ({
       'y': ['研究', '优化', '应用', '测试']
     };
     
-    // 检查搜索词是否是拼音首字母
     if (searchLower.length === 1 && pinyinMap[searchLower]) {
       return pinyinMap[searchLower].some(keyword => tagNameLower.includes(keyword));
     }
     
-    // 5. 模糊匹配 - 分词匹配
     const searchWords = searchLower.split(/\s+/).filter(word => word.length > 0);
     if (searchWords.length > 1) {
       return searchWords.every(word => tagNameLower.includes(word));
@@ -823,35 +868,31 @@ const TagPicker = ({
   });
   
   // 按匹配度排序
-const sortedFilteredTags = [...filteredTags].sort((a, b) => {
-  if (!searchTerm.trim()) {
-    // 搜索词为空时按字母顺序排序
-    const nameA = (typeof a === 'string' ? a : (a && a.name)) || '';
-    const nameB = (typeof b === 'string' ? b : (b && b.name)) || '';
-    return nameA.localeCompare(nameB);
-  }
-  
-  const searchLower = searchTerm.toLowerCase().trim();
-  const nameA = (typeof a === 'string' ? a : (a && a.name)) || '';
-  const nameB = (typeof b === 'string' ? b : (b && b.name)) || '';
-  const nameALower = nameA.toLowerCase();
-  const nameBLower = nameB.toLowerCase();
-  
-  // 完全匹配优先级最高
-  if (nameALower === searchLower && nameBLower !== searchLower) return -1;
-  if (nameBLower === searchLower && nameALower !== searchLower) return 1;
-  
-  // 开头匹配优先级较高
-  if (nameALower.startsWith(searchLower) && !nameBLower.startsWith(searchLower)) return -1;
-  if (nameBLower.startsWith(searchLower) && !nameALower.startsWith(searchLower)) return 1;
-  
-  // 长度优先 - 较短的标签优先
-  if (nameALower.includes(searchLower) && nameBLower.includes(searchLower)) {
-    return nameA.length - nameB.length;
-  }
-  
-  return 0;
-});
+  const sortedFilteredTags = [...filteredTags].sort((a, b) => {
+    if (!searchTerm.trim()) {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return nameA.localeCompare(nameB);
+    }
+    
+    const searchLower = searchTerm.toLowerCase().trim();
+    const nameA = a.name || '';
+    const nameB = b.name || '';
+    const nameALower = nameA.toLowerCase();
+    const nameBLower = nameB.toLowerCase();
+    
+    if (nameALower === searchLower && nameBLower !== searchLower) return -1;
+    if (nameBLower === searchLower && nameALower !== searchLower) return 1;
+    
+    if (nameALower.startsWith(searchLower) && !nameBLower.startsWith(searchLower)) return -1;
+    if (nameBLower.startsWith(searchLower) && !nameALower.startsWith(searchLower)) return 1;
+    
+    if (nameALower.includes(searchLower) && nameBLower.includes(searchLower)) {
+      return nameA.length - nameB.length;
+    }
+    
+    return 0;
+  });
 
   // 切换搜索模式
   const toggleSearchMode = () => {
@@ -935,7 +976,7 @@ const sortedFilteredTags = [...filteredTags].sort((a, b) => {
             <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto scrollbar-hide smooth-scroll-container scrollbar-smooth">
               {/* 显示收藏标签 - 过滤掉不存在的标签 */}
               {favoriteTags.length > 0 ? (
-                favoriteTags.filter(tag => availableTags.includes(tag)).map(tag => (
+                favoriteTags.filter(tag => availableTags.some(t => t.name === tag)).map(tag => (
                   <div
                     key={tag}
                     className="group relative flex-shrink-0 flex items-center"
@@ -1126,37 +1167,32 @@ const sortedFilteredTags = [...filteredTags].sort((a, b) => {
                               setSelectedColor(color.hexColor);
                               setShowColorPicker(false);
                               
-                              // 如果当前有选中的标签，更新其颜色
-                              if (selectedTags.length > 0) {
-                                const tagName = selectedTags[selectedTags.length - 1]; // 使用最后一个选中的标签
+                              // 只有在输入框没有内容时，才更新已有标签的颜色
+                              // 如果输入框有内容，说明用户正在为新标签选颜色，不应修改已有标签
+                              const hasInputContent = (isSearchMode ? searchTerm : inputValue).trim().length > 0;
+                              
+                              if (selectedTags.length > 0 && !hasInputContent) {
+                                const tagName = selectedTags[selectedTags.length - 1];
                                 try {
-                                  // 更新本地状态
                                   const newTagColorMap = {
                                     ...tagColorMap,
                                     [tagName]: color.hexColor
                                   };
                                   setTagColorMap(newTagColorMap);
                                   
-                                  // 更新本地存储
                                   const savedColors = JSON.parse(localStorage.getItem('tagColors') || '{}');
                                   savedColors[tagName] = color.hexColor;
                                   localStorage.setItem('tagColors', JSON.stringify(savedColors));
                                   
-                                  // 通过localConfigManager保存颜色
                                   await localConfigManager.setTagColor(tagName, color.hexColor);
                                   
-                                  // 触发UI更新事件
                                   window.dispatchEvent(new CustomEvent('tagColorsUpdated', {
                                     detail: { tagName, color: color.hexColor }
                                   }));
-                                  
-                                  console.log('🎨 TagPicker更新标签颜色:', { tagName, color: color.hexColor });
                                 } catch (error) {
                                   console.error('更新标签颜色失败:', error);
                                 }
                               }
-                              // 注意：这个颜色选择只影响TagPicker中已存在的标签
-                              // 不会影响TagSelector中新创建的标签颜色
                             }}
                             className="w-8 h-8 rounded-full border flex items-center justify-center"
                             style={{ 
@@ -1182,37 +1218,31 @@ const sortedFilteredTags = [...filteredTags].sort((a, b) => {
                               const color = e.target.value;
                               setSelectedColor(color);
                               
-                              // 如果当前有选中的标签，更新其颜色
-                              if (selectedTags.length > 0 && color.startsWith('#')) {
-                                const tagName = selectedTags[selectedTags.length - 1]; // 使用最后一个选中的标签
+                              // 只有在输入框没有内容时，才更新已有标签的颜色
+                              const hasInputContent = (isSearchMode ? searchTerm : inputValue).trim().length > 0;
+                              
+                              if (selectedTags.length > 0 && color.startsWith('#') && !hasInputContent) {
+                                const tagName = selectedTags[selectedTags.length - 1];
                                 try {
-                                  // 更新本地状态
                                   const newTagColorMap = {
                                     ...tagColorMap,
                                     [tagName]: color
                                   };
                                   setTagColorMap(newTagColorMap);
                                   
-                                  // 更新本地存储
                                   const savedColors = JSON.parse(localStorage.getItem('tagColors') || '{}');
                                   savedColors[tagName] = color;
                                   localStorage.setItem('tagColors', JSON.stringify(savedColors));
                                   
-                                  // 通过localConfigManager保存颜色
                                   await localConfigManager.setTagColor(tagName, color);
                                   
-                                  // 触发UI更新事件
                                   window.dispatchEvent(new CustomEvent('tagColorsUpdated', {
                                     detail: { tagName, color }
                                   }));
-                                  
-                                  console.log('🎨 TagPicker更新标签颜色(自定义):', { tagName, color });
                                 } catch (error) {
                                   console.error('更新标签颜色失败:', error);
                                 }
                               }
-                              // 注意：这个颜色选择只影响TagPicker中已存在的标签
-                              // 不会影响TagSelector中新创建的标签颜色
                             }}
                             className="w-8 h-8 rounded cursor-pointer"
                             style={{ borderColor: colors.borderColor }}
@@ -1227,38 +1257,32 @@ const sortedFilteredTags = [...filteredTags].sort((a, b) => {
                               if (hexColorRegex.test(value) || value === '') {
                                 setSelectedColor(value);
                                 
-                                // 如果当前有选中的标签且颜色值有效，更新其颜色
-                                if (selectedTags.length > 0 && hexColorRegex.test(value)) {
-                                  const tagName = selectedTags[selectedTags.length - 1]; // 使用最后一个选中的标签
+                                // 只有在输入框没有内容时，才更新已有标签的颜色
+                                const hasInputContent = (isSearchMode ? searchTerm : inputValue).trim().length > 0;
+                                
+                                if (selectedTags.length > 0 && hexColorRegex.test(value) && !hasInputContent) {
+                                  const tagName = selectedTags[selectedTags.length - 1];
                                   try {
-                                    // 更新本地状态
                                     const newTagColorMap = {
                                       ...tagColorMap,
                                       [tagName]: value
                                     };
                                     setTagColorMap(newTagColorMap);
                                     
-                                    // 更新本地存储
                                     const savedColors = JSON.parse(localStorage.getItem('tagColors') || '{}');
                                     savedColors[tagName] = value;
                                     localStorage.setItem('tagColors', JSON.stringify(savedColors));
                                     
-                                    // 通过localConfigManager保存颜色
                                     await localConfigManager.setTagColor(tagName, value);
                                     
-                                    // 触发UI更新事件
                                     window.dispatchEvent(new CustomEvent('tagColorsUpdated', {
                                       detail: { tagName, color: value }
                                     }));
-                                    
-                                    console.log('🎨 TagPicker更新标签颜色(文本输入):', { tagName, color: value });
                                   } catch (error) {
                                     console.error('更新标签颜色失败:', error);
                                   }
                                 }
                               }
-                              // 注意：这个颜色选择只影响TagPicker中已存在的标签
-                              // 不会影响TagSelector中新创建的标签颜色
                             }}
                             placeholder="#000000"
                             className="flex-1 px-2 py-1 text-xs rounded"
@@ -1351,39 +1375,63 @@ const sortedFilteredTags = [...filteredTags].sort((a, b) => {
                         <div className="p-2">
                           
                           {/* 可选择的标签部分 */}
-                          {sortedFilteredTags.filter(tag => !selectedTags.includes(tag)).length > 0 && (
+                          {sortedFilteredTags.filter(tag => !selectedTags.includes(tag.name)).length > 0 && (
                             <div id="available-tags-section">
                               <div className="text-xs font-medium mb-2 px-2" style={{ color: 'var(--theme-text-secondary)' }}>
                                 可选择的标签
                               </div>
                               {sortedFilteredTags
-                                .filter(tag => !selectedTags.includes(tag))
+                                .filter(tag => !selectedTags.includes(tag.name))
                                 .map(tag => (
                                   <div
-                                    key={`available-${tag}`}
+                                    key={`available-${tag.id || tag.name}`}
                                     className="px-3 py-2 mb-1 rounded cursor-pointer flex items-center justify-between"
                                     style={{
-                                      backgroundColor: 'var(--theme-elevated)'
+                                      backgroundColor: 'var(--theme-elevated)',
+                                      paddingLeft: `${12 + (tag.level || 0) * 16}px`
                                     }}
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <div
-                                        className="w-4 h-4 rounded-full"
-                                        style={getTagStyleFromState(tag)}
-                                      />
-                                      <span className="text-sm" style={{ color: colors.textColor }}>{tag}</span>
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                      {/* 标签组展开/折叠按钮 */}
+                                      {tag.isParent ? (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleGroupExpand(tag.id);
+                                          }}
+                                          className="flex-shrink-0 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
+                                          style={{ color: 'var(--theme-text-secondary)' }}
+                                        >
+                                          {expandedGroups.has(tag.id) ? (
+                                            <FiChevronDown size={12} />
+                                          ) : (
+                                            <FiChevronRight size={12} />
+                                          )}
+                                        </button>
+                                      ) : (
+                                        <span className="w-4 flex-shrink-0" />
+                                      )}
+                                      {/* 标签组图标或颜色圆点 */}
+                                      {tag.isParent ? (
+                                        <FiFolder className="flex-shrink-0 text-blue-500" size={14} />
+                                      ) : (
+                                        <div
+                                          className="w-4 h-4 rounded-full flex-shrink-0"
+                                          style={getTagStyleFromState(tag.name)}
+                                        />
+                                      )}
+                                      <span className="text-sm truncate" style={{ color: colors.textColor }}>{tag.name}</span>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-shrink-0">
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          if (!selectedTags.includes(tag)) {
-                                            const newSelectedTags = [...selectedTags, tag];
+                                          if (!selectedTags.includes(tag.name)) {
+                                            const newSelectedTags = [...selectedTags, tag.name];
                                             onTagsChange(newSelectedTags);
                                             
-                                            // 触发标签选择事件，确保状态同步
                                             window.dispatchEvent(new CustomEvent('tagsUpdated', {
-                                              detail: { action: 'select', tagName: tag, tags: newSelectedTags }
+                                              detail: { action: 'select', tagName: tag.name, tags: newSelectedTags }
                                             }));
                                           }
                                         }}
@@ -1393,19 +1441,19 @@ const sortedFilteredTags = [...filteredTags].sort((a, b) => {
                                           color: 'white'
                                         }}
                                       >
-                                        点击添加
+                                        添加
                                       </button>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          toggleFavorite(tag);
+                                          toggleFavorite(tag.name);
                                         }}
                                         className="text-xs p-1 rounded"
                                         style={{
-                                          color: favoriteTags.includes(tag) ? 'var(--theme-primary)' : 'var(--theme-text-secondary)',
-                                          border: favoriteTags.includes(tag) ? '1px solid var(--theme-primary)' : '1px solid var(--theme-border)'
+                                          color: favoriteTags.includes(tag.name) ? 'var(--theme-primary)' : 'var(--theme-text-secondary)',
+                                          border: favoriteTags.includes(tag.name) ? '1px solid var(--theme-primary)' : '1px solid var(--theme-border)'
                                         }}
-                                        title={favoriteTags.includes(tag) ? "已收藏" : "添加到收藏"}
+                                        title={favoriteTags.includes(tag.name) ? "已收藏" : "添加到收藏"}
                                       >
                                         <FiStar size={14} />
                                       </button>

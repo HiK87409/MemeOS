@@ -202,18 +202,30 @@ class TagModel {
         return;
       }
 
+      // 先清理指向该标签的parent_id引用，避免孤儿标签
       this.db.run(
-        `DELETE FROM tags WHERE user_id = ? AND id = ?`,
+        `UPDATE tags SET parent_id = NULL WHERE user_id = ? AND parent_id = ?`,
         [userId, tagId],
-        function(err) {
+        (err) => {
           if (err) {
-            console.error('删除标签失败:', err.message);
-            reject(err);
-          } else if (this.changes === 0) {
-            reject(new Error('标签不存在或无权限'));
-          } else {
-            resolve({ success: true, message: '标签删除成功', changes: this.changes });
+            console.warn('清理孤儿标签parent_id失败:', err.message);
           }
+
+          // 再删除标签本身
+          this.db.run(
+            `DELETE FROM tags WHERE user_id = ? AND id = ?`,
+            [userId, tagId],
+            function(err) {
+              if (err) {
+                console.error('删除标签失败:', err.message);
+                reject(err);
+              } else if (this.changes === 0) {
+                reject(new Error('标签不存在或无权限'));
+              } else {
+                resolve({ success: true, message: '标签删除成功', changes: this.changes });
+              }
+            }
+          );
         }
       );
     });
@@ -227,16 +239,42 @@ class TagModel {
         return;
       }
 
-      this.db.run(
-        `DELETE FROM tags WHERE user_id = ? AND name = ?`,
+      // 先获取标签ID以清理孤儿引用
+      this.db.get(
+        `SELECT id FROM tags WHERE user_id = ? AND name = ?`,
         [userId, tagName],
-        function(err) {
+        (err, row) => {
           if (err) {
-            console.error('删除标签失败:', err.message);
+            console.error('查询标签失败:', err.message);
             reject(err);
-          } else {
-            resolve({ success: true, message: '标签删除成功', changes: this.changes });
+            return;
           }
+
+          // 清理指向该标签的parent_id引用
+          if (row) {
+            this.db.run(
+              `UPDATE tags SET parent_id = NULL WHERE user_id = ? AND parent_id = ?`,
+              [userId, row.id],
+              (err) => {
+                if (err) {
+                  console.warn('清理孤儿标签parent_id失败:', err.message);
+                }
+              }
+            );
+          }
+
+          this.db.run(
+            `DELETE FROM tags WHERE user_id = ? AND name = ?`,
+            [userId, tagName],
+            function(err) {
+              if (err) {
+                console.error('删除标签失败:', err.message);
+                reject(err);
+              } else {
+                resolve({ success: true, message: '标签删除成功', changes: this.changes });
+              }
+            }
+          );
         }
       );
     });

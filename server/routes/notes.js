@@ -199,6 +199,8 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
           name: tag.name,
           color: tag.color,
           customColor: tagColors[tag.name] || null,
+          parent_id: tag.parent_id,
+          sort_order: tag.sort_order,
           noteCount: notes.length,
           notes: notes.map(note => ({
             id: note.id,
@@ -1034,7 +1036,7 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
           
           // 解析笔记中的引用
           const httpReferences = [];
-          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:3000\/note\/([a-zA-Z0-9\-_.]+)\)/g;
+          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)\)/g;
           let match;
           
           while ((match = httpReferenceRegex.exec(content)) !== null) {
@@ -1049,20 +1051,15 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
             }
           }
           
-          // 静默处理发现引用数量日志
-          
           // 创建引用关系
           let createdReferences = 0;
           for (const reference of httpReferences) {
             try {
-              // 验证被引用的笔记是否存在
               const referencedNote = await noteModel.getById(reference.noteId, userId);
               if (!referencedNote) {
-                // 静默处理被引用笔记不存在日志
                 continue;
               }
               
-              // 创建引用关系
               await new Promise((resolve, reject) => {
                 req.db.run(
                   'INSERT INTO note_references (from_note_id, to_note_id, reference_text, user_id) VALUES (?, ?, ?, ?)',
@@ -1075,21 +1072,19 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
               });
               
               createdReferences++;
-              // 静默处理创建引用关系日志
             } catch (refError) {
-              // 静默处理处理引用错误
+              console.error('创建引用关系失败:', refError.message);
             }
           }
           
-          // 静默处理自动引用检查完成日志
         } catch (autoRefError) {
-          // 静默处理自动引用检查错误
+          console.error('自动引用检查失败:', autoRefError.message);
         }
       }
       
       res.status(201).json(newNote);
     } catch (error) {
-      // 静默处理创建笔记错误
+      console.error('创建笔记失败:', error.message);
       res.status(500).json({ error: '创建笔记失败' });
     }
   });
@@ -1141,7 +1136,7 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
           
           // 解析笔记中的引用
           const httpReferences = [];
-          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:3000\/note\/([a-zA-Z0-9\-_.]+)\)/g;
+          const httpReferenceRegex = /\[([^\]]+)\]\(http:\/\/localhost:\d+\/note\/([a-zA-Z0-9\-_.]+)\)/g;
           let match;
           
           while ((match = httpReferenceRegex.exec(content)) !== null) {
@@ -1155,8 +1150,6 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
               });
             }
           }
-          
-          // 静默处理发现引用数量日志
           
           // 清理旧的引用关系
           await new Promise((resolve, reject) => {
@@ -1174,14 +1167,11 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
           let createdReferences = 0;
           for (const reference of httpReferences) {
             try {
-              // 验证被引用的笔记是否存在
               const referencedNote = await noteModel.getById(reference.noteId, userId);
               if (!referencedNote) {
-                // 静默处理被引用笔记不存在日志
                 continue;
               }
               
-              // 创建引用关系
               await new Promise((resolve, reject) => {
                 req.db.run(
                   'INSERT INTO note_references (from_note_id, to_note_id, reference_text, user_id) VALUES (?, ?, ?, ?)',
@@ -1194,9 +1184,8 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
               });
               
               createdReferences++;
-              // 静默处理创建引用关系日志
             } catch (refError) {
-              // 静默处理处理引用错误
+              console.error('创建引用关系失败:', refError.message);
             }
           }
           
@@ -1283,66 +1272,6 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
     } catch (error) {
       // 静默处理创建标签错误
       res.status(500).json({ error: '创建标签失败' });
-    }
-  });
-
-  // 删除标签
-  router.delete('/tags/:tagId', async (req, res) => {
-    try {
-      // 静默处理删除标签请求日志
-      const { tagId } = req.params;
-      
-      if (!tagId) {
-        return res.status(400).json({ error: '标签ID不能为空' });
-      }
-
-      // 使用全局userId常量
-      
-      // 获取标签信息
-      const tag = await tagModel.getTag(userId, tagId);
-      if (!tag) {
-        return res.status(404).json({ error: '标签不存在或无权限' });
-      }
-      
-      // 删除标签
-      await tagModel.deleteTag(userId, tagId);
-      
-      // 删除标签颜色配置
-      await tagColorModel.deleteTagColor(userId, tag.name);
-      
-      // 获取所有包含该标签的笔记
-      const notes = await noteModel.getAll(userId);
-      const notesWithTag = notes.filter(note => {
-        if (!note.tags) return false;
-        const noteTags = Array.isArray(note.tags) ? note.tags : note.tags.split(',').map(t => t.trim());
-        return noteTags.includes(tag.name);
-      });
-      
-      // 从相关笔记中移除该标签
-      for (const note of notesWithTag) {
-        const currentTags = Array.isArray(note.tags) ? note.tags : note.tags.split(',').map(t => t.trim());
-        const updatedTags = currentTags.filter(t => t !== tag.name);
-        
-        await noteModel.update(note.id, userId, {
-          content: note.content,
-          tags: updatedTags
-        });
-      }
-      
-      // 静默处理标签删除成功日志
-      
-      res.json({
-        success: true,
-        message: '标签删除成功',
-        deletedTag: {
-          id: tag.id,
-          name: tag.name
-        },
-        affectedNotes: notesWithTag.length
-      });
-    } catch (error) {
-      // 静默处理删除标签错误
-      res.status(500).json({ error: '删除标签失败' });
     }
   });
 
@@ -1453,255 +1382,6 @@ module.exports = (noteModel, tagColorModel, tagModel) => {
     }
   });
 
-  // 同步所有标签配置
-  router.post('/tags/sync', async (req, res) => {
-    try {
-      // 静默处理标签同步请求日志
-      const { tags } = req.body;
-      
-      if (!tags || !Array.isArray(tags)) {
-        return res.status(400).json({ error: '标签数据格式不正确' });
-      }
-
-      // 使用全局userId常量
-      const results = {
-        added: [],
-        updated: [],
-        deleted: [],
-        errors: []
-      };
-
-      // 获取当前用户的所有标签
-      const currentTags = await tagModel.getAllTags(userId);
-      const currentTagMap = new Map(currentTags.map(tag => [tag.id, tag]));
-      const currentTagNameMap = new Map(currentTags.map(tag => [tag.name, tag]));
-
-      // 处理每个标签
-      for (const tagData of tags) {
-        try {
-          const { id, name, color, isPinned, isFavorite, level, cards } = tagData;
-          
-          if (!name || !name.trim()) {
-            results.errors.push({
-              tag: tagData,
-              error: '标签名称不能为空'
-            });
-            continue;
-          }
-
-          const trimmedName = name.trim();
-          
-          // 检查是否是新增标签
-          if (!id) {
-            // 检查标签名称是否已存在
-            if (currentTagNameMap.has(trimmedName)) {
-              results.errors.push({
-                tag: tagData,
-                error: '标签名称已存在'
-              });
-              continue;
-            }
-            
-            // 创建新标签
-            const createResult = await tagModel.createTag(userId, trimmedName, color || 'blue');
-            const newTagId = createResult.tagId;
-            
-            // 保存标签颜色配置
-            if (color) {
-              await tagColorModel.saveTagColor(userId, trimmedName, color, 'preset');
-            }
-            
-            // 处理标签的附加属性（置顶、收藏、层级等）
-            if (isPinned || isFavorite || level !== undefined) {
-              // 这里可以扩展标签表结构或创建额外的配置表
-              // 目前先在标签颜色表中存储这些信息
-              const configData = {
-                isPinned: isPinned || false,
-                isFavorite: isFavorite || false,
-                level: level || 0
-              };
-              await tagColorModel.saveTagColor(userId, trimmedName, color || 'blue', 'preset');
-            }
-            
-            // 处理关联的卡片片
-            if (cards && Array.isArray(cards)) {
-              for (const cardData of cards) {
-                try {
-                  // 这里需要根据卡片数据创建或更新笔记
-                  // 假设卡片数据包含笔记内容等信息息
-                  if (cardData.content) {
-                    const noteData = {
-                      content: cardData.content,
-                      tags: [trimmedName],
-                      userId: userId,
-                      created_at: cardData.createdAt
-                    };
-                    
-                    if (cardData.id) {
-                      // 更新现有笔记
-                      await noteModel.update(cardData.id, userId, noteData);
-                    } else {
-                      // 创建新笔记
-                      const newNote = await noteModel.create(noteData);
-                    }
-                  }
-                } catch (cardError) {
-                  // 静默处理处理卡片错误
-                  results.errors.push({
-                    tag: tagData,
-                    card: cardData,
-                    error: '处理卡片失败: ' + cardError.message
-                  });
-                }
-              }
-            }
-            
-            results.added.push({
-              id: newTagId,
-              name: trimmedName,
-              color: color || 'blue',
-              isPinned: isPinned || false,
-              isFavorite: isFavorite || false,
-              level: level || 0
-            });
-          } else {
-            // 更新现有标签
-            const existingTag = currentTagMap.get(id);
-            if (!existingTag) {
-              results.errors.push({
-                tag: tagData,
-                error: '标签不存在'
-              });
-              continue;
-            }
-            
-            // 检查名称是否冲突突
-            if (existingTag.name !== trimmedName && currentTagNameMap.has(trimmedName)) {
-              results.errors.push({
-                tag: tagData,
-                error: '标签名称已存在'
-              });
-              continue;
-            }
-            
-            // 更新标签基本信息
-            const updates = {};
-            if (existingTag.name !== trimmedName) {
-              updates.name = trimmedName;
-            }
-            if (existingTag.color !== color) {
-              updates.color = color || 'blue';
-            }
-            
-            if (Object.keys(updates).length > 0) {
-              await tagModel.updateTag(userId, id, updates);
-            }
-            
-            // 更新标签颜色配置
-            if (color) {
-              await tagColorModel.saveTagColor(userId, trimmedName, color, 'preset');
-            }
-            
-            // 处理关联的卡片片
-            if (cards && Array.isArray(cards)) {
-              for (const cardData of cards) {
-                try {
-                  if (cardData.content) {
-                    const noteData = {
-                      content: cardData.content,
-                      tags: [trimmedName],
-                      userId: userId,
-                      created_at: cardData.createdAt
-                    };
-                    
-                    if (cardData.id) {
-                      await noteModel.update(cardData.id, userId, noteData);
-                    } else {
-                      await noteModel.create(noteData);
-                    }
-                  }
-                } catch (cardError) {
-                  // 静默处理处理卡片错误
-                  results.errors.push({
-                    tag: tagData,
-                    card: cardData,
-                    error: '处理卡片失败: ' + cardError.message
-                  });
-                }
-              }
-            }
-            
-            results.updated.push({
-              id: id,
-              name: trimmedName,
-              color: color || existingTag.color,
-              isPinned: isPinned || false,
-              isFavorite: isFavorite || false,
-              level: level || 0
-            });
-          }
-        } catch (tagError) {
-          // 静默处理处理标签错误
-          results.errors.push({
-            tag: tagData,
-            error: '处理标签失败: ' + tagError.message
-          });
-        }
-      }
-
-      // 处理删除的标签（服务器存在但客户端不存在的标签）
-      const clientTagIds = new Set(tags.filter(tag => tag.id).map(tag => tag.id));
-      const clientTagNames = new Set(tags.map(tag => tag.name.trim()));
-      
-      for (const existingTag of currentTags) {
-        if (!clientTagIds.has(existingTag.id) && !clientTagNames.has(existingTag.name)) {
-          try {
-            // 删除标签
-            await tagModel.deleteTag(userId, existingTag.id);
-            
-            // 删除标签颜色配置
-            await tagColorModel.deleteTagColor(userId, existingTag.name);
-            
-            // 删除与标签相关的笔记标签关联
-            // 这里需要根据实际的数据结构来处理理
-            
-            results.deleted.push({
-              id: existingTag.id,
-              name: existingTag.name
-            });
-          } catch (deleteError) {
-            // 静默处理删除标签错误
-            results.errors.push({
-              tag: existingTag,
-              error: '删除标签失败: ' + deleteError.message
-            });
-          }
-        }
-      }
-
-      // 获取同步后的完整标签列表
-      const finalTags = await tagModel.getAllTags(userId);
-      const finalTagColors = await tagColorModel.getUserTagColors(userId);
-
-      // 合并标签信息和颜色配置置
-      const mergedTags = finalTags.map(tag => ({
-        ...tag,
-        color: finalTagColors[tag.name] || tag.color
-      }));
-
-      // 静默处理标签同步完成日志
-
-      res.json({
-        success: true,
-        message: '标签同步完成',
-        results: results,
-        tags: mergedTags
-      });
-    } catch (error) {
-      // 静默处理标签同步错误
-      res.status(500).json({ error: '标签同步失败' });
-    }
-  });
 
 
 

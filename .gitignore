@@ -15,6 +15,9 @@ yarn.lock
 /.nuxt
 
 # 环境变量
+.env
+.env.local
+.env.*.local
 
 # 日志
 npm-debug.log*
@@ -54,4 +57,19 @@ $RECYCLE.BIN/
 .cache/
 .temp/
 .tmp/
+
+# 数据库文件
+*.sqlite
+*.sqlite3
+*.db
+
+# 备份文件
+*.backup
+*.working
+
+# 测试文件
+**/test-syntax.js
+
+# 上传文件
+/server/uploads/
 

@@ -14,7 +14,7 @@ import CalendarView from './pages/CalendarView';
 
 
 import RecycleBinPage from './pages/RecycleBinPage';
-import EnhancedBackupManagerPage from './pages/enhancedbackupmanagerpage';
+import EnhancedBackupManagerPage from './pages/EnhancedBackupManagerPage';
 import Debug from './pages/Debug';
 import RecycleBin from './components/RecycleBin';
 import BackupManager from './components/BackupManager';
@@ -25,9 +25,9 @@ import FontOptimizationPage from './pages/FontOptimizationPage';
 import SettingsPage from './pages/SettingsPage';
 
 // 任务管理相关组件
-import TaskDashboard from './pages/taskdashboard';
+import TaskDashboard from './pages/TaskDashboard';
 import NoteTasksPage from './pages/NoteTasksPage';
-import ProjectView from './pages/projectview';
+import ProjectView from './pages/ProjectView';
 import TaskComposer from './components/TaskComposer';
 
 import websocketService from './utils/websocket';
@@ -127,14 +127,6 @@ function AppContentWithEdit() {
       navigate('/');
     }
   }, [location.pathname, navigate]);
-
-  // 绑定全局标签筛选函数
-  useEffect(() => {
-    window.handleTagFilter = handleTagFilter;
-    return () => {
-      delete window.handleTagFilter;
-    };
-  }, [handleTagFilter]);
 
   // 处理日期筛选变化
   const handleDateFilter = (date) => {

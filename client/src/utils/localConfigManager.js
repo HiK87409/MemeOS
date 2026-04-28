@@ -1,5 +1,6 @@
 // 本地配置管理工具
 // 支持本地存储和数据库持久化的配置管理器
+// 标签数据统一存储在 user_configs 表（config_type='tags'），不再读取 tags 表
 
 // 导入API函数
 import { fetchConfig, saveConfig } from '../api/configapi.js';
@@ -63,18 +64,10 @@ class LocalConfigManager {
         const savedColors = localStorage.getItem(CONFIG_KEYS.TAG_COLORS);
         const savedPreferences = localStorage.getItem(CONFIG_KEYS.USER_PREFERENCES);
 
-        // 对从本地存储加载的标签数据进行字段转换，确保数据结构一致
         const parsedTags = savedConfig ? JSON.parse(savedConfig) : DEFAULT_CONFIG.tags;
-        const processedTags = parsedTags.map(tag => ({
-          ...tag,
-          // 将数据库的parent_id字段转换为前端的parentId字段（兼容旧数据）
-          parentId: tag.parent_id !== null ? tag.parent_id : (tag.parentId || null),
-          // 确保sort_order字段存在
-          sort_order: tag.sort_order !== undefined ? tag.sort_order : (tag.sort_order || 0)
-        }));
 
         this.config = {
-          tags: processedTags,
+          tags: parsedTags,
           tagColors: savedColors ? JSON.parse(savedColors) : DEFAULT_CONFIG.tagColors,
           userPreferences: savedPreferences ? JSON.parse(savedPreferences) : DEFAULT_CONFIG.userPreferences
         };
@@ -90,27 +83,26 @@ class LocalConfigManager {
     }
   }
 
-  // 从数据库加载配置
+  // 从数据库加载配置（唯一数据源：user_configs 表）
   async loadFromDatabase() {
     try {
       const response = await fetchConfig();
       if (response.data) {
-        // 对标签数据进行字段转换和排序
-        const processedTags = (response.data.tags || DEFAULT_CONFIG.tags).map(tag => ({
-          ...tag,
-          // 将数据库的parent_id字段转换为前端的parentId字段
-          parentId: tag.parent_id !== null ? tag.parent_id : null,
-          // 确保sort_order字段存在
-          sort_order: tag.sort_order !== undefined ? tag.sort_order : 0
-        }));
+        // 清理标签数据：移除冗余的 parent_id 字段，统一使用 parentId
+        const processedTags = (response.data.tags || DEFAULT_CONFIG.tags).map(tag => {
+          const { parent_id, children, ...rest } = tag;
+          return {
+            ...rest,
+            parentId: rest.parentId || null,
+            sort_order: rest.sort_order !== undefined ? rest.sort_order : 0
+          };
+        });
         
         const sortedTags = processedTags.sort((a, b) => {
-          // 如果有sort_order字段，按照sort_order排序
           if (a.sort_order !== undefined && b.sort_order !== undefined) {
             return a.sort_order - b.sort_order;
           }
-          // 如果没有sort_order字段，按照id排序作为后备
-          return a.id - b.id;
+          return 0;
         });
         
         this.config = {
@@ -119,7 +111,7 @@ class LocalConfigManager {
           userPreferences: response.data.userPreferences || DEFAULT_CONFIG.userPreferences
         };
         this.isOnline = true;
-        console.log('从数据库加载配置成功，标签已按sort_order排序');
+        console.log('从数据库加载配置成功，标签数量:', sortedTags.length);
         
         // 通知监听器数据已更新
         this.notifyListeners('tagsChanged', this.config.tags);
@@ -139,23 +131,25 @@ class LocalConfigManager {
     try {
       this.syncInProgress = true;
       
-      // 为标签添加sort_order字段和parent_id字段转换
-      const tagsWithOrder = this.config.tags.map((tag, index) => ({
-        ...tag,
-        sort_order: tag.sort_order !== undefined ? tag.sort_order : index,
-        // 将前端的parentId字段转换为数据库的parent_id字段
-        parent_id: tag.parentId !== null ? tag.parentId : null
-      }));
+      // 清理标签数据：移除运行时字段，只保留必要数据
+      const cleanedTags = this.config.tags.map((tag, index) => {
+        const { children, isParent, parent_id, ...rest } = tag;
+        return {
+          ...rest,
+          sort_order: rest.sort_order !== undefined ? rest.sort_order : index,
+          parentId: rest.parentId || null
+        };
+      });
       
       const configData = {
-        tags: tagsWithOrder,
+        tags: cleanedTags,
         tagColors: this.config.tagColors,
         userPreferences: this.config.userPreferences
       };
       
       await saveConfig(configData);
       this.isOnline = true;
-      console.log('配置保存到数据库成功（包含sort_order字段）');
+      console.log('配置保存到数据库成功');
       
     } catch (error) {
       console.error('保存配置到数据库失败:', error);
@@ -172,38 +166,32 @@ class LocalConfigManager {
       {
         id: generateId(),
         name: '工作',
-        isPinned: true,
-        children: []
+        isPinned: true
       },
       {
         id: generateId(),
         name: '学习',
-        isPinned: false,
-        children: []
+        isPinned: false
       },
       {
         id: generateId(),
         name: '项目A',
-        isPinned: false,
-        children: []
+        isPinned: false
       },
       {
         id: generateId(),
         name: '项目B',
-        isPinned: false,
-        children: []
+        isPinned: false
       },
       {
         id: generateId(),
         name: '编程',
-        isPinned: false,
-        children: []
+        isPinned: false
       },
       {
         id: generateId(),
         name: '设计',
-        isPinned: false,
-        children: []
+        isPinned: false
       }
     ];
 
@@ -238,15 +226,7 @@ class LocalConfigManager {
 
   // 获取所有标签
   getTags() {
-    // 确保返回的标签数据使用统一的字段格式
-    const tags = deepClone(this.config.tags);
-    return tags.map(tag => ({
-      ...tag,
-      // 统一使用parentId字段，兼容旧数据中的parent_id
-      parentId: tag.parent_id !== null ? tag.parent_id : (tag.parentId || null),
-      // 确保sort_order字段存在
-      sort_order: tag.sort_order !== undefined ? tag.sort_order : 0
-    }));
+    return deepClone(this.config.tags);
   }
 
   // 获取标签颜色映射
@@ -272,7 +252,8 @@ class LocalConfigManager {
       id: generateId(),
       name: tagData.name,
       isPinned: tagData.isPinned || false,
-      children: []
+      parentId: parentId || tagData.parentId || null,
+      sort_order: tagData.sort_order || this.config.tags.length
     };
 
     // 直接添加到标签列表
@@ -317,7 +298,7 @@ class LocalConfigManager {
       if (a.sort_order !== undefined && b.sort_order !== undefined) {
         return a.sort_order - b.sort_order;
       }
-      return a.id - b.id;
+      return 0;
     });
 
     await this.syncConfig();
@@ -332,6 +313,14 @@ class LocalConfigManager {
     const index = this.config.tags.findIndex(tag => tag.id === tagId);
     if (index !== -1) {
       this.config.tags.splice(index, 1);
+      
+      // 清理孤儿标签：将指向已删除标签的parentId置为null
+      this.config.tags.forEach(tag => {
+        if (tag.parentId === tagId) {
+          tag.parentId = null;
+        }
+      });
+      
       await this.syncConfig();
       this.notifyListeners('tagsChanged', this.config.tags);
       return true;
@@ -410,8 +399,6 @@ class LocalConfigManager {
       });
     }
   }
-
-
 
   // 导出配置
   exportConfig() {
@@ -515,11 +502,6 @@ class LocalConfigManager {
   async reloadFromDatabase() {
     return await this.loadFromDatabase();
   }
-
-
-
-  
-
 }
 
 // 创建全局实例
